@@ -1,0 +1,16 @@
+# Node
+node_modules/
+dist/
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# System
+.DS_Store
+
+# Data
+spreadsheet/*.xlsx
+!spreadsheet/template.xlsx
