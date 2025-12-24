@@ -39,9 +39,9 @@ function headerIndexMap_(rowValues) {
 function readTable_(sheet) {
   var rng = sheet.getDataRange();
   var values = rng.getValues();
-  if (values.length < 2) return { header: [], rows: [] };
+  if (values.length < 1) return { header: [], rows: [] };
   var header = values[0];
-  var rows = values.slice(1).filter(function(r){ return r.join('').trim() !== ''; });
+  var rows = values.length < 2 ? [] : values.slice(1).filter(function(r){ return r.join('').trim() !== ''; });
   return { header: header, rows: rows };
 }
 
@@ -101,11 +101,20 @@ function listReservations() {
 
   var items = rt.rows.map(function(r){
     var id = String(r[rIdx['Id']]);
+    var rawDate = r[rIdx['Date']];
+    var rawStart = r[rIdx['Start']];
+    var rawEnd = r[rIdx['End']];
+    var tz = Session.getScriptTimeZone();
+
+    var dateStr = (rawDate instanceof Date) ? Utilities.formatDate(rawDate, tz, 'yyyy-MM-dd') : rawDate;
+    var startStr = (rawStart instanceof Date) ? Utilities.formatDate(rawStart, tz, 'HH:mm') : rawStart;
+    var endStr = (rawEnd instanceof Date) ? Utilities.formatDate(rawEnd, tz, 'HH:mm') : rawEnd;
+
     return {
       Id: id,
-      Date: r[rIdx['Date']],      // yyyy-mm-dd
-      Start: r[rIdx['Start']],    // HH:MM
-      End: r[rIdx['End']],        // HH:MM
+      Date: dateStr,      // yyyy-mm-dd
+      Start: startStr,    // HH:MM
+      End: endStr,        // HH:MM
       Court: r[rIdx['Court']],
       Capacity: Number(r[rIdx['Capacity']]) || 0,
       BaseFee: Number(r[rIdx['BaseFee']]) || 0,

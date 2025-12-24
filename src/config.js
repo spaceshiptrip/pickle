@@ -2,7 +2,7 @@
 // TODO: Update these values for your deployment.
 
 // Google Apps Script "web app" URL that writes to your Google Sheet.
-export const APP_SCRIPT_URL = 'https://script.google.com/macros/s/REPLACE_ME/exec';
+export const APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxFMchEdz2Pk89zP41iAy92RS5D1zfSvDAcQpZ8C3X_nt_tbRySyu2tqFvTiNW61mpz/exec';
 
 // Player access code (simple shared gate).
 export const ACCESS_CODE = 'playercode';
