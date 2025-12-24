@@ -1,167 +1,273 @@
-// Google Apps Script backend for the Pickleball Check-In app.
-//
-// Attach this script to your Google Sheet (Extensions -> Apps Script),
-// deploy as a Web App, and use the deployed URL as APP_SCRIPT_URL in src/config.js.
-//
-// Expected POST payload (x-www-form-urlencoded: payload=<JSON>):
-// {
-//   "userName": "Jay",
-//   "targets": ["Jay", "Alice"],
-//   "paid": true,
-//   "amount": 10,
-//   "date": "2025-10-31"  // YYYY-MM-DD
-// }
-//
-// This script is tailored to your existing sheet structure with an
-// `Attendance` tab that looks like:
-//
-//   Date | Hours | Player Name | Present (1/0) | Charge (auto) | PAID
-//
-// It appends one row per checked-in player. If `paid` is true, the total
-// amount is divided equally among all players being checked in in that
-// request, and that per-player amount is written to `Charge (auto)`.
+/* Minimal Apps Script backend for Reservations + Attendance + Fees.
+   Why: keeps persistence on Google Sheets while staying static-hosted. */
 
 var ATTENDANCE_SHEET_NAME = 'Attendance';
-var DEFAULT_HOURS = 2; // You can change this to 1 or another default.
+var RESERVATIONS_SHEET_NAME = 'Reservations';
+var FEES_SHEET_NAME = 'Fees';
+var DEFAULT_HOURS = 2;
+
+function doGet(e) {
+  var action = (e.parameter.action || '').toLowerCase();
+  if (action === 'listreservations') return json(listReservations());
+  if (action === 'listattendance') return json(listAttendance_(e));
+  return json({ ok: false, error: 'unknown_action' }, 400);
+}
 
 function doPost(e) {
-  try {
-    if (!e || !e.parameter || !e.parameter.payload) {
-      return jsonResponse({ status: 'error', message: 'No payload' });
-    }
-
-    var data = JSON.parse(e.parameter.payload);
-
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName(ATTENDANCE_SHEET_NAME);
-    if (!sheet) {
-      return jsonResponse({ status: 'error', message: 'Attendance sheet not found: ' + ATTENDANCE_SHEET_NAME });
-    }
-
-    var byUser = data.userName || '';
-    var targets = data.targets || [];
-    var paid = !!data.paid;
-    var totalAmount = Number(data.amount) || 0;
-
-    var checkinDateString = data.date || '';
-    var checkinDate = parseYyyyMmDdOrToday(checkinDateString);
-
-    if (targets.length === 0 && byUser) {
-      targets = [byUser];
-    }
-
-    if (targets.length === 0) {
-      return jsonResponse({ status: 'error', message: 'No targets to check in.' });
-    }
-
-    var perPlayerCharge = 0;
-    if (paid && totalAmount > 0) {
-      perPlayerCharge = totalAmount / targets.length;
-      perPlayerCharge = Math.round(perPlayerCharge * 100) / 100; // 2 decimal places
-    }
-
-    // Build rows
-    var rows = [];
-    for (var i = 0; i < targets.length; i++) {
-      var name = targets[i];
-      var charge = paid ? perPlayerCharge : 0;
-      // Date | Hours | Player Name | Present (1/0) | Charge (auto) | PAID
-      rows.push([checkinDate, DEFAULT_HOURS, name, 1, charge, paid]);
-    }
-
-    if (rows.length > 0) {
-      sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-    }
-
-    return jsonResponse({ status: 'ok', rowsAdded: rows.length });
-
-  } catch (err) {
-    return jsonResponse({ status: 'error', message: String(err) });
-  }
+  var action = (e.parameter.action || '').toLowerCase();
+  var payload = e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : {};
+  if (action === 'signup') return json(signup_(payload));
+  if (action === 'markpaid') return json(markPaid_(payload));
+  if (action === 'upsertreservation') return json(upsertReservation_(payload));
+  if (action === 'addfee') return json(addFee_(payload));
+  return json({ ok: false, error: 'unknown_action' }, 400);
 }
 
-// GET handler used both as a health check and for the "admin view".
-//
-// If called with ?date=YYYY-MM-DD, it returns rows from `Attendance`
-// whose Date equals that date (by calendar day):
-//
-// {
-//   "status": "ok",
-//   "date": "2025-10-31",
-//   "rows": [
-//     { "playerName": "Jay", "paid": true, "charge": 5, "hours": 2 },
-//     ...
-//   ]
-// }
-function doGet(e) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ATTENDANCE_SHEET_NAME);
-  if (!sheet) {
-    return jsonResponse({ status: 'error', message: 'Attendance sheet not found: ' + ATTENDANCE_SHEET_NAME });
-  }
-
-  if (e && e.parameter && e.parameter.date) {
-    var dateParam = e.parameter.date;
-    var targetDate = parseYyyyMmDdOrToday(dateParam);
-    var targetSerial = dateSerial(targetDate);
-
-    var lastRow = sheet.getLastRow();
-    if (lastRow < 2) {
-      return jsonResponse({ status: 'ok', date: dateParam, rows: [] });
-    }
-
-    // Assume headers in row 1, data from row 2.
-    var dataRange = sheet.getRange(2, 1, lastRow - 1, 6); // Date..PAID
-    var values = dataRange.getValues();
-
-    var rows = [];
-    for (var i = 0; i < values.length; i++) {
-      var row = values[i];
-      var dateValue = row[0]; // Date
-      if (!dateValue) continue;
-
-      // Compare only by date (ignore time)
-      if (dateSerial(dateValue) === targetSerial) {
-        rows.push({
-          playerName: row[2],                // Player Name
-          paid: !!row[5],                    // PAID (boolean)
-          charge: Number(row[4]) || 0,       // Charge (auto)
-          hours: Number(row[1]) || DEFAULT_HOURS
-        });
-      }
-    }
-
-    return jsonResponse({ status: 'ok', date: dateParam, rows: rows });
-  }
-
-  // Default health check
-  return jsonResponse({ status: 'ok' });
+/** -------- Sheets helpers -------- */
+function sheetByName(name) {
+  var sh = SpreadsheetApp.getActive().getSheetByName(name);
+  if (!sh) throw new Error('Missing sheet: ' + name);
+  return sh;
 }
 
-// Helpers
+function headerIndexMap_(rowValues) {
+  var map = {};
+  for (var i = 0; i < rowValues.length; i++) map[rowValues[i]] = i;
+  return map;
+}
 
-function jsonResponse(obj) {
-  return ContentService
-    .createTextOutput(JSON.stringify(obj))
+function readTable_(sheet) {
+  var rng = sheet.getDataRange();
+  var values = rng.getValues();
+  if (values.length < 2) return { header: [], rows: [] };
+  var header = values[0];
+  var rows = values.slice(1).filter(function(r){ return r.join('').trim() !== ''; });
+  return { header: header, rows: rows };
+}
+
+function upsertRowById_(sheet, idColName, rowObj) {
+  var t = readTable_(sheet);
+  var idx = headerIndexMap_(t.header);
+  if (!(idColName in idx)) throw new Error('Missing ID column: ' + idColName);
+  var idCol = idx[idColName];
+  // find existing
+  var foundRowIndex = -1; // 0-based in rows[]
+  for (var i = 0; i < t.rows.length; i++) {
+    if (String(t.rows[i][idCol]) === String(rowObj[idColName])) { foundRowIndex = i; break; }
+  }
+  // ensure all header columns exist in rowObj
+  var arr = t.header.map(function(h){ return rowObj[h] === undefined ? '' : rowObj[h]; });
+  if (foundRowIndex >= 0) {
+    sheet.getRange(foundRowIndex + 2, 1, 1, arr.length).setValues([arr]);
+    return rowObj;
+  }
+  // append
+  sheet.appendRow(arr);
+  return rowObj;
+}
+
+function nextReservationId_() {
+  var sh = sheetByName(RESERVATIONS_SHEET_NAME);
+  var t = readTable_(sh);
+  var idx = headerIndexMap_(t.header);
+  var idCol = idx['Id'];
+  var maxId = 0;
+  for (var i=0;i<t.rows.length;i++){
+    var v = Number(t.rows[i][idCol]);
+    if (!isNaN(v) && v > maxId) maxId = v;
+  }
+  return String(maxId + 1);
+}
+
+/** -------- API impl -------- */
+function listReservations() {
+  var rs = sheetByName(RESERVATIONS_SHEET_NAME);
+  var fs = sheetByName(FEES_SHEET_NAME);
+  var rt = readTable_(rs);
+  var ft = readTable_(fs);
+  var rIdx = headerIndexMap_(rt.header);
+  var fIdx = headerIndexMap_(ft.header);
+
+  var feesByRes = {};
+  for (var j=0;j<ft.rows.length;j++){
+    var rId = String(ft.rows[j][fIdx['ReservationId']]);
+    if (!feesByRes[rId]) feesByRes[rId] = [];
+    feesByRes[rId].push({
+      ReservationId: rId,
+      FeeName: ft.rows[j][fIdx['FeeName']],
+      Amount: Number(ft.rows[j][fIdx['Amount']]) || 0
+    });
+  }
+
+  var items = rt.rows.map(function(r){
+    var id = String(r[rIdx['Id']]);
+    return {
+      Id: id,
+      Date: r[rIdx['Date']],      // yyyy-mm-dd
+      Start: r[rIdx['Start']],    // HH:MM
+      End: r[rIdx['End']],        // HH:MM
+      Court: r[rIdx['Court']],
+      Capacity: Number(r[rIdx['Capacity']]) || 0,
+      BaseFee: Number(r[rIdx['BaseFee']]) || 0,
+      Fees: feesByRes[id] || []
+    };
+  });
+  return { ok: true, reservations: items };
+}
+
+function listAttendance_(e) {
+  var resId = e.parameter.reservationId;
+  var month = e.parameter.month; // YYYY-MM (optional) parameter for reports
+
+  var at = readTable_(sheetByName(ATTENDANCE_SHEET_NAME));
+  if (at.rows.length === 0) return { ok: true, attendees: [] };
+  var idx = headerIndexMap_(at.header);
+
+  // Filter
+  var rows = at.rows.filter(function(r){
+    // If reservationId is specific, match it
+    if (resId) return String(r[idx['ReservationId']]) === String(resId);
+    
+    // If looking for a specific month (format YYYY-MM)
+    if (month) {
+      // Date in sheet is usually a Date object or string YYYY-MM-DD
+      var d = r[idx['Date']];
+      var ds = (d instanceof Date) ? Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM') : String(d).substring(0, 7);
+      return ds === month;
+    }
+    
+    // Otherwise return everything (careful with large datasets)
+    return true;
+  }).map(function(r){
+    return {
+      Date: r[idx['Date']],
+      Hours: r[idx['Hours']],
+      Player: r[idx['Player Name']],
+      Present: r[idx['Present (1/0)']],
+      Charge: Number(r[idx['Charge (auto)']]) || 0,
+      PAID: String(r[idx['PAID']]) === '1',
+      ReservationId: r[idx['ReservationId']]
+    };
+  });
+  return { ok: true, attendees: rows };
+}
+
+function signup_(payload) {
+  // payload: { reservationId, players: [name], markPaid, totalAmount }
+  if (!payload || !payload.reservationId || !payload.players || payload.players.length===0)
+    return { ok: false, error: 'bad_request' };
+
+  var res = findReservation_(payload.reservationId);
+  if (!res) return { ok: false, error: 'reservation_not_found' };
+
+  var attendees = readTable_(sheetByName(ATTENDANCE_SHEET_NAME));
+  var idx = headerIndexMap_(attendees.header);
+
+  var totalFees = res.BaseFee + sum_(res.Fees.map(function(f){ return Number(f.Amount)||0; }));
+  var perPlayer = round2_((payload.totalAmount || totalFees) / payload.players.length);
+
+  var rowsToAppend = payload.players.map(function(p){
+    var row = {};
+    attendees.header.forEach(function(h){ row[h] = ''; });
+    row['Date'] = res.Date;
+    row['Hours'] = DEFAULT_HOURS;
+    row['Player Name'] = p;
+    row['Present (1/0)'] = 1;
+    row['Charge (auto)'] = perPlayer;
+    row['PAID'] = payload.markPaid ? 1 : 0;
+    row['ReservationId'] = res.Id;
+    return attendees.header.map(function(h){ return row[h]; });
+  });
+
+  if (rowsToAppend.length > 0) {
+    var sh = sheetByName(ATTENDANCE_SHEET_NAME);
+    sh.getRange(sh.getLastRow()+1, 1, rowsToAppend.length, attendees.header.length).setValues(rowsToAppend);
+  }
+  return { ok: true, perPlayer: perPlayer };
+}
+
+function markPaid_(payload) {
+  // payload: { reservationId, player, paid: true/false }
+  var at = readTable_(sheetByName(ATTENDANCE_SHEET_NAME));
+  var idx = headerIndexMap_(at.header);
+  var sh = sheetByName(ATTENDANCE_SHEET_NAME);
+  for (var i=0;i<at.rows.length;i++){
+    var r = at.rows[i];
+    if (String(r[idx['ReservationId']]) === String(payload.reservationId) &&
+        String(r[idx['Player Name']]).trim().toLowerCase() === String(payload.player).trim().toLowerCase()) {
+      var rowNum = i + 2;
+      var colNum = idx['PAID'] + 1;
+      sh.getRange(rowNum, colNum).setValue(payload.paid ? 1 : 0);
+      return { ok: true };
+    }
+  }
+  return { ok: false, error: 'player_not_found' };
+}
+
+function upsertReservation_(payload) {
+  // payload: { Id? , Date, Start, End, Court, Capacity, BaseFee }
+  var sh = sheetByName(RESERVATIONS_SHEET_NAME);
+  var row = {
+    'Id': payload.Id || nextReservationId_(),
+    'Date': payload.Date,
+    'Start': payload.Start,
+    'End': payload.End,
+    'Court': payload.Court,
+    'Capacity': payload.Capacity,
+    'BaseFee': payload.BaseFee
+  };
+  upsertRowById_(sh, 'Id', row);
+  return { ok: true, reservation: row };
+}
+
+function addFee_(payload) {
+  // payload: { ReservationId, FeeName, Amount }
+  var sh = sheetByName(FEES_SHEET_NAME);
+  sh.appendRow([payload.ReservationId, payload.FeeName, payload.Amount]);
+  return { ok: true };
+}
+
+function findReservation_(id) {
+  var rs = readTable_(sheetByName(RESERVATIONS_SHEET_NAME));
+  var idx = headerIndexMap_(rs.header);
+  for (var i=0;i<rs.rows.length;i++){
+    var r = rs.rows[i];
+    if (String(r[idx['Id']]) === String(id)) {
+      return {
+        Id: String(r[idx['Id']]),
+        Date: r[idx['Date']],
+        Start: r[idx['Start']],
+        End: r[idx['End']],
+        Court: r[idx['Court']],
+        Capacity: Number(r[idx['Capacity']]) || 0,
+        BaseFee: Number(r[idx['BaseFee']]) || 0,
+        Fees: listFeesFor_(String(r[idx['Id']]))
+      };
+    }
+  }
+  return null;
+}
+
+function listFeesFor_(reservationId) {
+  var fs = readTable_(sheetByName(FEES_SHEET_NAME));
+  var idx = headerIndexMap_(fs.header);
+  return fs.rows
+    .filter(function(r){ return String(r[idx['ReservationId']]) === reservationId; })
+    .map(function(r){ return { ReservationId: reservationId, FeeName: r[idx['FeeName']], Amount: Number(r[idx['Amount']]) || 0 }; });
+}
+
+function json(obj, status) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function parseYyyyMmDdOrToday(s) {
-  if (!s) {
-    return new Date();
-  }
-  var parts = s.split('-');
-  if (parts.length === 3) {
-    var year = Number(parts[0]);
-    var month = Number(parts[1]) - 1;
-    var day = Number(parts[2]);
-    if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-      return new Date(year, month, day);
-    }
-  }
-  return new Date();
-}
+function sum_(arr){ return arr.reduce(function(a,b){ return a+(Number(b)||0); }, 0); }
+function round2_(n){ return Math.round((Number(n)||0)*100)/100; }
 
-// Convert a Date to a serial day number (ignoring time) for comparison.
-function dateSerial(d) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-}
+/** ---- Setup note (one-time) ----
+Create these headers exactly:
+
+Reservations:  Id | Date | Start | End | Court | Capacity | BaseFee
+Attendance:    Date | Hours | Player Name | Present (1/0) | Charge (auto) | PAID | ReservationId
+Fees:          ReservationId | FeeName | Amount
+*/
