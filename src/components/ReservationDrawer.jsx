@@ -106,7 +106,14 @@ export default function ReservationDrawer({ reservation, onClose, role }) {
                     </label>
                     <div className="flex gap-2 mt-3">
                         <button className="bg-blue-600 text-white rounded px-4 py-2 font-semibold" onClick={submit}>Submit sign-up</button>
-                        <a className="bg-blue-100 text-blue-800 rounded px-4 py-2 font-semibold" href={VENMO_URL} target="_blank" rel="noreferrer">Open Venmo</a>
+                        <a
+                            className="bg-blue-100 text-blue-800 rounded px-4 py-2 font-semibold"
+                            href={`${VENMO_URL}?txn=pay&amount=${perPlayer}&note=Pickleball ${reservation.Date} ${reservation.Start}`}
+                            target="_blank"
+                            rel="noreferrer"
+                        >
+                            Pay ${perPlayer} via Venmo
+                        </a>
                     </div>
                 </div>
 

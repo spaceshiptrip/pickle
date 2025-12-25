@@ -13,5 +13,8 @@ export const ORGANIZER_CODE = 'organizercode';
 // Default payment amount in dollars (total amount the payer is sending).
 export const DEFAULT_AMOUNT = 5;
 
-// Venmo link (e.g., 'https://venmo.com/your-handle' or Venmo payment URL).
-export const VENMO_URL = 'https://venmo.com/your-handle';
+// Venmo handle (e.g., '@John-Doe').
+export const VENMO_HANDLE = '@Jay-Torres-367';
+
+// Venmo link (e.g., 'https://venmo.com/John-Doe').
+export const VENMO_URL = `https://venmo.com/${VENMO_HANDLE.replace('@', '')}`;
