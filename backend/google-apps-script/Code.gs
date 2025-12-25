@@ -80,6 +80,18 @@ function doPost(e) {
     return json_(addFee_(payload));
   }
 
+  if (action === 'listapprovals') {
+    var ctx4 = requireAuth_(e, payload);
+    requireRole_(ctx4, ['admin']);
+    return json_(listApprovals_());
+  }
+
+  if (action === 'approveguest') {
+    var ctx5 = requireAuth_(e, payload);
+    requireRole_(ctx5, ['admin']);
+    return json_(approveGuest_(payload));
+  }
+
   // New auth actions (recommended to call with JSON {action:"auth.loginWithPin", ...})
   if (action === 'auth.loginwithpin') return json_(auth_loginWithPin_(payload));
   if (action === 'auth.requestmagiclink') return json_(auth_requestMagicLink_(payload));
@@ -632,6 +644,79 @@ function rowToUser_(header, row, idx) {
     PinHash: row[idx['PinHash']],
     Active: active
   };
+}
+
+/** -------- Approval helpers -------- */
+function listApprovals_() {
+  var sh = sheetByName(APPROVALS_SHEET_NAME);
+  var t = readTable_(sh);
+  if (t.rows.length === 0) return { ok: true, requests: [] };
+  var idx = headerIndexMap_(t.header);
+
+  var pending = t.rows.filter(function(r) {
+    return String(r[idx['Status']] || '').toLowerCase() === 'pending';
+  }).map(function(r) {
+    return {
+      RequestId: r[idx['RequestId']],
+      Email: r[idx['Email']],
+      Name: r[idx['Name']],
+      CreatedAt: r[idx['CreatedAt']]
+    };
+  });
+
+  return { ok: true, requests: pending };
+}
+
+function approveGuest_(payload) {
+  var requestId = payload.requestId;
+  if (!requestId) return { ok: false, error: 'missing_request_id' };
+
+  var ash = sheetByName(APPROVALS_SHEET_NAME);
+  var at = readTable_(ash);
+  var aidx = headerIndexMap_(at.header);
+
+  var found = -1;
+  var email = '';
+  var name = '';
+
+  for (var i = 0; i < at.rows.length; i++) {
+    if (String(at.rows[i][aidx['RequestId']]) === requestId) {
+      found = i;
+      email = at.rows[i][aidx['Email']];
+      name = at.rows[i][aidx['Name']];
+      break;
+    }
+  }
+
+  if (found === -1) return { ok: false, error: 'request_not_found' };
+
+  // 1. Move to Users
+  var ush = sheetByName(USERS_SHEET_NAME);
+  var ut = readTable_(ush);
+  var uidx = headerIndexMap_(ut.header);
+
+  // find max userId
+  var maxId = 0;
+  for (var j = 0; j < ut.rows.length; j++) {
+    var id = Number(ut.rows[j][uidx['UserId']]) || 0;
+    if (id > maxId) maxId = id;
+  }
+
+  var newUser = {};
+  ut.header.forEach(function(h) { newUser[h] = ''; });
+  newUser['UserId'] = maxId + 1;
+  newUser['Role'] = 'guest';
+  newUser['Name'] = name;
+  newUser['Email'] = email;
+  newUser['Active'] = 1;
+
+  ush.appendRow(ut.header.map(function(h) { return newUser[h]; }));
+
+  // 2. Mark as approved
+  var col = aidx['Status'] + 1;
+  ash.getRange(found + 2, col).setValue('approved');
+
+  return { ok: true };
 }
 
 /** -------- PIN hashing -------- */

@@ -12,6 +12,10 @@ export default function AdminPanel() {
     const [reportData, setReportData] = useState([]);
     const [reportLoading, setReportLoading] = useState(false);
 
+    // Approvals
+    const [approvals, setApprovals] = useState([]);
+    const [approvalsLoading, setApprovalsLoading] = useState(false);
+
     async function load() {
         setLoading(true);
         try {
@@ -19,8 +23,29 @@ export default function AdminPanel() {
             if (r.ok) setReservations(r.reservations);
         } catch (e) { console.error(e); }
         setLoading(false);
+        loadApprovals();
     }
     useEffect(() => { load(); }, []);
+
+    async function loadApprovals() {
+        setApprovalsLoading(true);
+        try {
+            const r = await apiGet({ action: 'listapprovals' });
+            if (r.ok) setApprovals(r.requests);
+        } catch (e) { console.error(e); }
+        setApprovalsLoading(false);
+    }
+
+    async function approveGuest(requestId) {
+        if (!confirm("Are you sure you want to approve this guest?")) return;
+        try {
+            const r = await apiPost('approveguest', { requestId });
+            if (r.ok) {
+                alert("Guest approved!");
+                loadApprovals();
+            }
+        } catch (e) { alert("Error: " + e.message); }
+    }
 
     async function loadReport() {
         if (!reportMonth) return;
@@ -208,6 +233,54 @@ export default function AdminPanel() {
                         </div>
                     </div>
                 )}
+            </div>
+
+            {/* Approvals Section */}
+            <div className="border-t pt-4 mt-6">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-semibold text-lg">Pending Guest Approvals</h3>
+                    <button onClick={loadApprovals} className="text-xs border px-2 py-1 rounded bg-white">Refresh Approvals</button>
+                </div>
+
+                <div className="bg-white p-4 rounded shadow-sm border">
+                    {approvalsLoading ? (
+                        <div className="text-center py-4 text-gray-500">Loading requests...</div>
+                    ) : approvals.length === 0 ? (
+                        <div className="text-center py-4 text-gray-500 italic">No pending requests</div>
+                    ) : (
+                        <div className="max-h-60 overflow-y-auto">
+                            <table className="w-full text-sm text-left border-collapse">
+                                <thead className="bg-gray-100 sticky top-0">
+                                    <tr>
+                                        <th className="p-2 border-b">Name</th>
+                                        <th className="p-2 border-b">Email</th>
+                                        <th className="p-2 border-b">Request Date</th>
+                                        <th className="p-2 border-b text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {approvals.map((req) => (
+                                        <tr key={req.RequestId} className="hover:bg-gray-50">
+                                            <td className="p-2 border-b font-medium">{req.Name}</td>
+                                            <td className="p-2 border-b text-gray-600">{req.Email}</td>
+                                            <td className="p-2 border-b text-gray-500 whitespace-nowrap">
+                                                {new Date(req.CreatedAt).toLocaleDateString()}
+                                            </td>
+                                            <td className="p-2 border-b text-right">
+                                                <button
+                                                    onClick={() => approveGuest(req.RequestId)}
+                                                    className="bg-indigo-600 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-indigo-500 transition-colors"
+                                                >
+                                                    Approve
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
