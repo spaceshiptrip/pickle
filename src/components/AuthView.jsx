@@ -49,7 +49,7 @@ export default function AuthView({ onLoginSuccess }) {
         <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
             <div className="max-w-md w-full bg-slate-800 rounded-3xl p-8 border border-slate-700 shadow-2xl">
                 <div className="flex flex-col items-center mb-6">
-                    <img src={logo} alt="Athenaeum Picklers Logo" className="h-24 w-24 object-contain mb-4" />
+                    <img src={logo} alt="Athenaeum Picklers Logo" className="h-20 w-20 sm:h-28 sm:w-28 object-contain mb-4" />
                     <h1 className="text-3xl font-black text-white text-center">Pickleball Login</h1>
                     <p className="text-slate-400 text-center">Access reservations and payments</p>
                 </div>
