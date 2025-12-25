@@ -105,7 +105,7 @@ export default function App() {
       {user.role === 'admin' && <AdminPanel />}
 
       <div className="mt-12 text-center text-sm text-gray-400 pb-8">
-        Pickle Check-in App · Open Source · Caltech Picklers
+        <a href="https://github.com/spaceshiptrip/pickle" target="_blank" rel="noreferrer" className="hover:underline text-gray-500">Too Complex Pickle Check-in App</a> · <a href="https://opensource.org/licenses/MIT" target="_blank" rel="noreferrer" className="hover:underline text-gray-500">Open Source</a> · <a href="https://github.com/spaceshiptrip" target="_blank" rel="noreferrer" className="hover:underline text-gray-500">SpaceshipTrip ツ</a> · <a href="https://nadabarkada.com" target="_blank" rel="noreferrer" className="hover:underline text-gray-500">Athenaeum Picklers</a>
       </div>
     </div>
   );
