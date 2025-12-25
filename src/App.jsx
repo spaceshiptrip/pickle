@@ -5,7 +5,7 @@ import AdminPanel from './components/AdminPanel.jsx';
 import AuthView from './components/AuthView.jsx';
 import { authApi } from './api';
 import logo from './assets/AthPicklersLogo.png';
-import spaceshiplogo from './assets/SpaceshiptripLogo.png';
+import spaceshiplogo from './assets/SpaceshipTripLogo.png';
 
 export default function App() {
   const [user, setUser] = useState(null);
