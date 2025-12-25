@@ -664,6 +664,14 @@ function normalizePhone_(s) {
   return digits;
 }
 
+
+function generateMyHash() {
+  const myPin = "1234"; // <-- Change this to the PIN you want!
+  const salt = PropertiesService.getScriptProperties().getProperty("PIN_SALT_V1");
+  const hash = sha256Hex_(salt + ":" + myPin);
+  Logger.log("Your PIN Hash is: " + hash);
+}
+
 /** -------- Response helpers -------- */
 function json_(obj, status) {
   // Apps Script ContentService cannot set HTTP status codes reliably.
