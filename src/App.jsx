@@ -77,10 +77,10 @@ export default function App() {
   return (
     <div className="max-w-5xl mx-auto p-4 font-sans text-gray-900">
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 border-b pb-4 gap-4">
-        <div className="flex items-center gap-4">
-          <img src={logo} alt="Athenaeum Picklers Logo" className="h-12 w-12 sm:h-16 sm:w-16 object-contain" />
+        <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 text-center sm:text-left">
+          <img src={logo} alt="Athenaeum Picklers Logo" className="h-12 w-12 sm:h-10 sm:w-10 object-contain" />
           <div>
-            <h1 className="text-3xl font-bold text-blue-900">Pickleball Schedule</h1>
+            <h1 className="text-2xl sm:text-3xl font-black text-blue-900 uppercase tracking-tight">Pickleball Schedule</h1>
             <p className="text-sm text-gray-500">Welcome back, <span className="font-bold text-indigo-600">{user.name}</span></p>
           </div>
         </div>
@@ -108,8 +108,11 @@ export default function App() {
 
       {user.role === 'admin' && <AdminPanel />}
 
-      <div className="mt-12 text-center text-sm text-gray-400 pb-8">
-        <a href="https://github.com/spaceshiptrip/pickle" target="_blank" rel="noreferrer" className="hover:underline text-gray-500">Too Complex Pickle Check-in App</a> · <a href="https://opensource.org/licenses/MIT" target="_blank" rel="noreferrer" className="hover:underline text-gray-500">Open Source</a> · <a href="https://github.com/spaceshiptrip" target="_blank" rel="noreferrer" className="hover:underline text-gray-500">SpaceshipTrip ツ</a> · <a href="https://nadabarkada.com" target="_blank" rel="noreferrer" className="hover:underline text-gray-500">Athenaeum Picklers</a>
+      <div className="mt-12 text-center text-sm text-gray-400 pb-8 flex flex-col items-center gap-2">
+        <img src={logo} alt="Logo" className="h-6 w-6 opacity-40 grayscale" />
+        <div>
+          <a href="https://github.com/spaceshiptrip/pickle" target="_blank" rel="noreferrer" className="hover:underline text-gray-500">Too Complex Pickle Check-in App</a> · <a href="https://opensource.org/licenses/MIT" target="_blank" rel="noreferrer" className="hover:underline text-gray-500">Open Source</a> · <a href="https://github.com/spaceshiptrip" target="_blank" rel="noreferrer" className="hover:underline text-gray-500">SpaceshipTrip ツ</a> · <a href="https://nadabarkada.com" target="_blank" rel="noreferrer" className="hover:underline text-gray-500">Athenaeum Picklers</a>
+        </div>
       </div>
     </div>
   );
