@@ -4,6 +4,8 @@
 var ATTENDANCE_SHEET_NAME = 'Attendance';
 var RESERVATIONS_SHEET_NAME = 'Reservations';
 var FEES_SHEET_NAME = 'Fees';
+var APPROVALS_SHEET_NAME = 'Approvals';
+
 var DEFAULT_HOURS = 2;
 
 // New auth-related sheets
@@ -159,6 +161,43 @@ function readTable_(sheet) {
   return { header: header, rows: rows };
 }
 
+
+function createApprovalRequest_(email, name) {
+  var sh = sheetByName(APPROVALS_SHEET_NAME);
+  var t = readTable_(sh);
+  if (!t.header || t.header.length === 0) throw new Error('Approvals sheet missing header');
+
+  var requestId = Utilities.getUuid().replace(/-/g, '');
+  var now = new Date();
+
+  var rowObj = {};
+  t.header.forEach(function(h){ rowObj[h] = ''; });
+
+  rowObj['RequestId'] = requestId;
+  rowObj['Email'] = email;
+  rowObj['Name'] = name || '';
+  rowObj['Status'] = 'pending';
+  rowObj['CreatedAt'] = now;
+
+  sh.appendRow(t.header.map(function(h){ return rowObj[h]; }));
+  return requestId;
+}
+
+function findPendingApprovalByEmail_(email) {
+  var sh = sheetByName(APPROVALS_SHEET_NAME);
+  var t = readTable_(sh);
+  var idx = headerIndexMap_(t.header);
+
+  for (var i = 0; i < t.rows.length; i++) {
+    var r = t.rows[i];
+    var em = normalizeEmail_(r[idx['Email']]);
+    var status = String(r[idx['Status']] || '').toLowerCase();
+    if (em === email && status === 'pending') return true;
+  }
+  return false;
+}
+
+
 function upsertRowById_(sheet, idColName, rowObj) {
   var t = readTable_(sheet);
   var idx = headerIndexMap_(t.header);
@@ -310,7 +349,8 @@ function signup_(payload, ctx) {
     players = payload.players.map(function(p){ return String(p || '').trim(); }).filter(Boolean);
   } else {
     // member/guest can only sign up themselves
-    players = [String(ctx.user.Name || '').trim()];
+    players = [String((ctx.user && ctx.user.Name) || '').trim()];
+
     if (!players[0]) return { ok: false, error: 'missing_user_name' };
   }
 
@@ -326,9 +366,16 @@ function signup_(payload, ctx) {
     row['Hours'] = DEFAULT_HOURS;
     row['Player Name'] = p;
 
-    // New: bind row to userId if not admin
-    if (String(attendees.header).indexOf('UserId') !== -1) {
-      row['UserId'] = (ctx.role === 'admin') ? '' : ctx.userId;
+    // Bind row to userId when possible
+    if (idxHasHeader_(attendees.header, 'UserId')) {
+      if (ctx.role !== 'admin') {
+        // member/guest signing themselves
+        row['UserId'] = ctx.userId;
+      } else {
+        // admin adding by name: try to match a user by Name
+        var u = findUserByName_(p);
+        row['UserId'] = (u && u.Active) ? u.UserId : '';
+      }
     }
 
     row['Present (1/0)'] = 1;
@@ -455,16 +502,21 @@ function auth_requestMagicLink_(payload) {
 
   var user = findUserByEmail_(email);
 
-  // Do not leak existence; always return same message
-  if (!user || !user.Active) return { ok: true, message: 'If approved, you will receive an email shortly.' };
+  // If user exists + active + guest => proceed with token
+  if (user && user.Active && user.Role === 'guest') {
+    var token = createAuthToken_(user.UserId, MAGIC_LINK_TTL_MIN);
+    sendMagicLinkEmail_(email, token);
+    return { ok: true, message: 'If approved, you will receive an email shortly.' };
+  }
 
-  // Only allow guests by default; change this if you want members to also use email
-  if (user.Role !== 'guest') return { ok: true, message: 'If approved, you will receive an email shortly.' };
+  // Otherwise: create (or reuse) a pending approval request
+  if (!findPendingApprovalByEmail_(email)) {
+    createApprovalRequest_(email, String(payload.name || '').trim());
+  }
 
-  var token = createAuthToken_(user.UserId, MAGIC_LINK_TTL_MIN);
-  sendMagicLinkEmail_(email, token);
-
+  // Always return same message (don’t leak existence)
   return { ok: true, message: 'If approved, you will receive an email shortly.' };
+
 }
 
 function auth_consumeToken_(payload) {
@@ -509,6 +561,28 @@ function auth_logout_(payload) {
 }
 
 /** -------- Users helpers -------- */
+function idxHasHeader_(header, colName) {
+  for (var i = 0; i < header.length; i++) {
+    if (String(header[i]).trim() === colName) return true;
+  }
+  return false;
+}
+
+function findUserByName_(name) {
+  var target = String(name || '').trim().toLowerCase();
+  if (!target) return null;
+
+  var t = readTable_(sheetByName(USERS_SHEET_NAME));
+  var idx = headerIndexMap_(t.header);
+
+  for (var i = 0; i < t.rows.length; i++) {
+    var r = t.rows[i];
+    var nm = String(r[idx['Name']] || '').trim().toLowerCase();
+    if (nm === target) return rowToUser_(t.header, r, idx);
+  }
+  return null;
+}
+
 function findUserByPhone_(phone) {
   var t = readTable_(sheetByName(USERS_SHEET_NAME));
   var idx = headerIndexMap_(t.header);

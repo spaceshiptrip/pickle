@@ -32,7 +32,7 @@ export async function apiPost(action, body) {
 /** Auth Endpoints */
 export const authApi = {
   loginWithPin: (phone, pin) => apiPost('auth.loginwithpin', { phone, pin }),
-  requestMagicLink: (email) => apiPost('auth.requestmagiclink', { email }),
+  requestMagicLink: (email, name) => apiPost('auth.requestmagiclink', { email, name }),
   consumeToken: (token) => apiPost('auth.consumetoken', { token }),
   logout: (sessionId) => apiPost('auth.logout', { sessionId }),
   whoAmI: (sessionId) => apiPost('auth.whoami', { sessionId }),

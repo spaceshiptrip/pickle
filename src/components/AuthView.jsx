@@ -6,6 +6,7 @@ export default function AuthView({ onLoginSuccess }) {
     const [phone, setPhone] = useState('');
     const [pin, setPin] = useState('');
     const [email, setEmail] = useState('');
+    const [name, setName] = useState('');
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
@@ -32,7 +33,7 @@ export default function AuthView({ onLoginSuccess }) {
         setError('');
         setMessage('');
         try {
-            const res = await authApi.requestMagicLink(email);
+            const res = await authApi.requestMagicLink(email, name);
             if (res.ok) {
                 setMessage(res.message);
             }
@@ -97,6 +98,17 @@ export default function AuthView({ onLoginSuccess }) {
                     </form>
                 ) : (
                     <form onSubmit={handleGuestRequest} className="space-y-6">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Full Name</label>
+                            <input
+                                type="text"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                placeholder="John Doe"
+                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                required
+                            />
+                        </div>
                         <div>
                             <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Email Address</label>
                             <input
