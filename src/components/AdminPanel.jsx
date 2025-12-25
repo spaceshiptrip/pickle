@@ -15,6 +15,7 @@ export default function AdminPanel() {
     // Approvals
     const [approvals, setApprovals] = useState([]);
     const [approvalsLoading, setApprovalsLoading] = useState(false);
+    const [approvalsError, setApprovalsError] = useState('');
 
     async function load() {
         setLoading(true);
@@ -29,10 +30,18 @@ export default function AdminPanel() {
 
     async function loadApprovals() {
         setApprovalsLoading(true);
+        setApprovalsError('');
         try {
             const r = await apiGet({ action: 'listapprovals' });
-            if (r.ok) setApprovals(r.requests);
-        } catch (e) { console.error(e); }
+            if (r.ok) {
+                setApprovals(r.requests);
+            } else {
+                setApprovalsError(r.error || 'Failed to load approvals');
+            }
+        } catch (e) {
+            console.error(e);
+            setApprovalsError(e.message);
+        }
         setApprovalsLoading(false);
     }
 
@@ -243,6 +252,11 @@ export default function AdminPanel() {
                 </div>
 
                 <div className="bg-white p-4 rounded shadow-sm border">
+                    {approvalsError && (
+                        <div className="p-3 mb-4 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+                            ⚠️ Error: {approvalsError}
+                        </div>
+                    )}
                     {approvalsLoading ? (
                         <div className="text-center py-4 text-gray-500">Loading requests...</div>
                     ) : approvals.length === 0 ? (
