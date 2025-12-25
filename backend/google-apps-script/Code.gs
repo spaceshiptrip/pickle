@@ -508,27 +508,26 @@ function auth_loginWithPin_(payload) {
 }
 
 function auth_requestMagicLink_(payload) {
-  // Guests (or anyone you allow) can request a one-time link via email
   var email = normalizeEmail_(payload.email);
   if (!email) return { ok: true, message: 'If approved, you will receive an email shortly.' };
 
   var user = findUserByEmail_(email);
 
-  // If user exists + active + guest => proceed with token
+  // 1. Approved Guest: Send a new fresh link
   if (user && user.Active && user.Role === 'guest') {
     var token = createAuthToken_(user.UserId, MAGIC_LINK_TTL_MIN);
     sendMagicLinkEmail_(email, token);
-    return { ok: true, message: 'If approved, you will receive an email shortly.' };
+    return { ok: true, message: 'A new magic link has been sent to your email! (Check your spam if it doesn’t arrive)' };
   }
 
-  // Otherwise: create (or reuse) a pending approval request
-  if (!findPendingApprovalByEmail_(email)) {
-    createApprovalRequest_(email, String(payload.name || '').trim());
+  // 2. Pending Request: Tell them it is in progress
+  if (findPendingApprovalByEmail_(email)) {
+    return { ok: true, message: 'Your request is currently pending approval. We will email you once approved!' };
   }
 
-  // Always return same message (don’t leak existence)
-  return { ok: true, message: 'If approved, you will receive an email shortly.' };
-
+  // 3. New Request: Submit for approval
+  createApprovalRequest_(email, String(payload.name || '').trim());
+  return { ok: true, message: 'Your access request has been submitted! We will email you a magic link once approved.' };
 }
 
 function auth_consumeToken_(payload) {
