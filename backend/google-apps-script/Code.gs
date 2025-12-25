@@ -52,6 +52,12 @@ function doGet(e) {
     }
   }
 
+  if (action === 'listapprovals') {
+    var ctx4 = requireAuth_(e, null);
+    requireRole_(ctx4, ['admin']);
+    return json_(listApprovals_());
+  }
+
   return json_({ ok: false, error: 'unknown_action' }, 400);
 }
 
@@ -78,12 +84,6 @@ function doPost(e) {
     var ctx3 = requireAuth_(e, payload);
     requireRole_(ctx3, ['admin']);
     return json_(addFee_(payload));
-  }
-
-  if (action === 'listapprovals') {
-    var ctx4 = requireAuth_(e, payload);
-    requireRole_(ctx4, ['admin']);
-    return json_(listApprovals_());
   }
 
   if (action === 'approveguest') {
@@ -715,6 +715,10 @@ function approveGuest_(payload) {
   // 2. Mark as approved
   var col = aidx['Status'] + 1;
   ash.getRange(found + 2, col).setValue('approved');
+
+  // 3. Automatically send magic link email
+  var token = createAuthToken_(newUser['UserId'], MAGIC_LINK_TTL_MIN);
+  sendMagicLinkEmail_(email, token);
 
   return { ok: true };
 }
