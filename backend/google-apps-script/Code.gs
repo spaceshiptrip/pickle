@@ -517,7 +517,7 @@ function auth_requestMagicLink_(payload) {
   if (user && user.Active && user.Role === 'guest') {
     var token = createAuthToken_(user.UserId, MAGIC_LINK_TTL_MIN);
     sendMagicLinkEmail_(email, token);
-    return { ok: true, message: 'A new magic link has been sent to your email! (Check your spam if it doesn’t arrive)' };
+    return { ok: true, message: 'Welcome back! You are already approved. A new magic link has been sent to your email.' };
   }
 
   // 2. Pending Request: Tell them it is in progress
