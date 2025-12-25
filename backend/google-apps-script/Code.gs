@@ -25,8 +25,18 @@ function doGet(e) {
   var action = getAction_(e, null);
 
   // Existing GET actions
-  if (action === 'listreservations') return json_(listReservations());
-  if (action === 'listattendance') return json_(listAttendance_(e));
+  if (action === 'listreservations') {
+    var ctx = requireAuth_(e, null);
+    // allow all roles
+    requireRole_(ctx, ['admin','member','guest']);
+    return json_(listReservations());
+  }
+
+  if (action === 'listattendance') {
+    var ctx2 = requireAuth_(e, null);
+    requireRole_(ctx2, ['admin','member','guest']);
+    return json_(listAttendance_(e, ctx2));
+  }
 
   // Optional: allow token consumption via GET link
   // /exec?action=auth.consumetoken&token=...
@@ -48,10 +58,25 @@ function doPost(e) {
   var action = getAction_(e, payload);
 
   // Existing POST actions
-  if (action === 'signup') return json_(signup_(payload));
-  if (action === 'markpaid') return json_(markPaid_(payload));
-  if (action === 'upsertreservation') return json_(upsertReservation_(payload));
-  if (action === 'addfee') return json_(addFee_(payload));
+  if (action === 'signup') return json_(signup_(payload, requireAuth_(e, payload)));
+
+  if (action === 'markpaid') {
+    var ctx = requireAuth_(e, payload);
+    requireRole_(ctx, ['admin']);
+    return json_(markPaid_(payload));
+  }
+
+  if (action === 'upsertreservation') {
+    var ctx2 = requireAuth_(e, payload);
+    requireRole_(ctx2, ['admin']);
+    return json_(upsertReservation_(payload));
+  }
+
+  if (action === 'addfee') {
+    var ctx3 = requireAuth_(e, payload);
+    requireRole_(ctx3, ['admin']);
+    return json_(addFee_(payload));
+  }
 
   // New auth actions (recommended to call with JSON {action:"auth.loginWithPin", ...})
   if (action === 'auth.loginwithpin') return json_(auth_loginWithPin_(payload));
@@ -64,6 +89,35 @@ function doPost(e) {
 }
 
 /** -------- Request helpers -------- */
+
+function requireAuth_(e, payload) {
+  var sid = '';
+
+  // allow sessionId from query string for GETs
+  if (e && e.parameter && e.parameter.sessionId) sid = String(e.parameter.sessionId).trim();
+
+  // allow sessionId in JSON body for POSTs
+  if (!sid && payload && payload.sessionId) sid = String(payload.sessionId).trim();
+
+  if (!sid) throw new Error('auth_required');
+
+  var sess = findSession_(sid);
+  if (!sess) throw new Error('invalid_session');
+  if (sess.ExpiresAtMs < Date.now()) throw new Error('session_expired');
+
+  var user = findUserById_(sess.UserId);
+  if (!user || !user.Active) throw new Error('invalid_user');
+
+  return { sessionId: sid, user: user, role: user.Role, userId: user.UserId };
+}
+
+function requireRole_(ctx, allowed) {
+  if (!ctx || !ctx.role) throw new Error('auth_required');
+  if (allowed.indexOf(ctx.role) === -1) throw new Error('forbidden');
+}
+
+
+
 function parseBody_(e) {
   try {
     if (!e || !e.postData || !e.postData.contents) return {};
@@ -186,41 +240,61 @@ function listReservations() {
   return { ok: true, reservations: items };
 }
 
-function listAttendance_(e) {
+function listAttendance_(e, ctx) {
   var resId = e.parameter.reservationId;
   var month = e.parameter.month; // YYYY-MM (optional)
 
   var at = readTable_(sheetByName(ATTENDANCE_SHEET_NAME));
   if (at.rows.length === 0) return { ok: true, attendees: [] };
   var idx = headerIndexMap_(at.header);
+  var isAdmin = (ctx && ctx.role === 'admin');
+  var hasUserIdCol = (idx['UserId'] !== undefined);
+  var currentUserId = (ctx && ctx.userId) ? String(ctx.userId) : '';
 
   var rows = at.rows.filter(function(r){
     if (resId) return String(r[idx['ReservationId']]) === String(resId);
 
     if (month) {
       var d = r[idx['Date']];
-      var ds = (d instanceof Date) ? Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM') : String(d).substring(0, 7);
+      var ds = (d instanceof Date)
+        ? Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM')
+        : String(d).substring(0, 7);
       return ds === month;
     }
 
     return true;
   }).map(function(r){
+    var rowUserId = '';
+    if (hasUserIdCol) rowUserId = String(r[idx['UserId']] || '');
+
+    var isSelf = false;
+    if (rowUserId && currentUserId && rowUserId === currentUserId) isSelf = true;
+
+    var chargeVal = null;
+    var paidVal = null;
+
+    if (isAdmin || isSelf) {
+      chargeVal = Number(r[idx['Charge (auto)']]) || 0;
+      paidVal = (String(r[idx['PAID']]) === '1');
+    }
+
     return {
       Date: r[idx['Date']],
       Hours: r[idx['Hours']],
       Player: r[idx['Player Name']],
       Present: r[idx['Present (1/0)']],
-      Charge: Number(r[idx['Charge (auto)']]) || 0,
-      PAID: String(r[idx['PAID']]) === '1',
+      Charge: chargeVal,
+      PAID: paidVal,
       ReservationId: r[idx['ReservationId']]
     };
   });
 
   return { ok: true, attendees: rows };
+
 }
 
-function signup_(payload) {
-  if (!payload || !payload.reservationId || !payload.players || payload.players.length===0)
+function signup_(payload, ctx) {
+  if (!payload || !payload.reservationId)
     return { ok: false, error: 'bad_request' };
 
   var res = findReservation_(payload.reservationId);
@@ -228,18 +302,41 @@ function signup_(payload) {
 
   var attendees = readTable_(sheetByName(ATTENDANCE_SHEET_NAME));
 
-  var totalFees = res.BaseFee + sum_(res.Fees.map(function(f){ return Number(f.Amount)||0; }));
-  var perPlayer = round2_((payload.totalAmount || totalFees) / payload.players.length);
+  // Determine who is being signed up
+  var players = [];
 
-  var rowsToAppend = payload.players.map(function(p){
+  if (ctx.role === 'admin') {
+    if (!payload.players || payload.players.length === 0) return { ok: false, error: 'bad_request' };
+    players = payload.players.map(function(p){ return String(p || '').trim(); }).filter(Boolean);
+  } else {
+    // member/guest can only sign up themselves
+    players = [String(ctx.user.Name || '').trim()];
+    if (!players[0]) return { ok: false, error: 'missing_user_name' };
+  }
+
+  var totalFees = res.BaseFee + sum_(res.Fees.map(function(f){ return Number(f.Amount)||0; }));
+  var totalAmount = payload.totalAmount ? Number(payload.totalAmount) : totalFees;
+  var perPlayer = round2_(totalAmount / players.length);
+
+  var rowsToAppend = players.map(function(p){
     var row = {};
     attendees.header.forEach(function(h){ row[h] = ''; });
+
     row['Date'] = res.Date;
     row['Hours'] = DEFAULT_HOURS;
     row['Player Name'] = p;
+
+    // New: bind row to userId if not admin
+    if (String(attendees.header).indexOf('UserId') !== -1) {
+      row['UserId'] = (ctx.role === 'admin') ? '' : ctx.userId;
+    }
+
     row['Present (1/0)'] = 1;
     row['Charge (auto)'] = perPlayer;
-    row['PAID'] = payload.markPaid ? 1 : 0;
+
+    // Only admin can mark paid server-side
+    row['PAID'] = (ctx.role === 'admin' && payload.markPaid) ? 1 : 0;
+
     row['ReservationId'] = res.Id;
     return attendees.header.map(function(h){ return row[h]; });
   });
