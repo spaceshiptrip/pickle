@@ -76,12 +76,12 @@ export default function App() {
 
   return (
     <div className="max-w-5xl mx-auto p-4 font-sans text-gray-900">
-      <div className="flex flex-col sm:flex-row justify-between items-center mb-6 border-b pb-4 gap-4">
-        <div className="flex items-center justify-center sm:justify-start gap-3 w-full sm:w-auto">
-          <img src={logo} alt="Athenaeum Picklers Logo" className="h-5 w-5 sm:h-8 sm:w-8 object-contain" />
-          <div className="text-left">
-            <h1 className="text-lg sm:text-2xl font-black text-blue-900 uppercase tracking-tighter">Pickleball Schedule</h1>
-            <p className="text-[10px] sm:text-xs text-gray-500">Welcome back, <span className="font-bold text-indigo-600">{user.name}</span></p>
+      <div className="flex flex-col items-center sm:flex-row sm:justify-between mb-6 border-b pb-4 gap-4">
+        <div className="flex flex-col items-center sm:flex-row gap-2 sm:gap-4">
+          <img src={logo} alt="Athenaeum Picklers Logo" className="h-4 w-4 sm:h-6 sm:w-6 object-contain" />
+          <div className="text-center sm:text-left">
+            <h1 className="text-lg sm:text-2xl font-black text-blue-900 uppercase tracking-tighter leading-none">Pickleball Schedule</h1>
+            <p className="text-[10px] sm:text-xs text-gray-500 mt-1">Welcome back, <span className="font-bold text-indigo-600">{user.name}</span></p>
           </div>
         </div>
 
