@@ -4,6 +4,10 @@ const getSessionId = () => localStorage.getItem('pickle_session_id');
 
 export async function apiGet(params) {
   const url = new URL(APP_SCRIPT_URL);
+
+  const sessionId = getSessionId();
+  if (sessionId) url.searchParams.set('sessionId', sessionId);
+
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   const res = await fetch(url.toString(), { method: 'GET' });
   if (!res.ok) throw new Error('API error');
