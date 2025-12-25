@@ -4,6 +4,7 @@ import ReservationDrawer from './components/ReservationDrawer.jsx';
 import AdminPanel from './components/AdminPanel.jsx';
 import AuthView from './components/AuthView.jsx';
 import { authApi } from './api';
+import logo from './assets/AthPicklersLogo.png';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -76,9 +77,12 @@ export default function App() {
   return (
     <div className="max-w-5xl mx-auto p-4 font-sans text-gray-900">
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 border-b pb-4 gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-blue-900">Pickleball Schedule</h1>
-          <p className="text-sm text-gray-500">Welcome back, <span className="font-bold text-indigo-600">{user.name}</span></p>
+        <div className="flex items-center gap-4">
+          <img src={logo} alt="Athenaeum Picklers Logo" className="h-16 w-16 object-contain" />
+          <div>
+            <h1 className="text-3xl font-bold text-blue-900">Pickleball Schedule</h1>
+            <p className="text-sm text-gray-500">Welcome back, <span className="font-bold text-indigo-600">{user.name}</span></p>
+          </div>
         </div>
 
         <div className="flex items-center gap-4">
