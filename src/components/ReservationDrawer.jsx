@@ -131,11 +131,15 @@ export default function ReservationDrawer({ reservation, onClose, role }) {
                                 {roster.map((r, idx) => (
                                     <tr key={idx}>
                                         <td className="p-2 border">{r.Player}</td>
-                                        <td className="p-2 border">${r.Charge}</td>
+                                        <td className="p-2 border">{r.Charge !== null ? `$${r.Charge}` : '-'}</td>
                                         <td className="p-2 border">
-                                            <span className={`px-2 py-0.5 rounded text-xs ${r.PAID ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                                {r.PAID ? 'Yes' : 'No'}
-                                            </span>
+                                            {r.PAID !== null ? (
+                                                <span className={`px-2 py-0.5 rounded text-xs ${r.PAID ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                                    {r.PAID ? 'Yes' : 'No'}
+                                                </span>
+                                            ) : (
+                                                <span className="text-gray-400 italic">Private</span>
+                                            )}
                                         </td>
                                         {role === 'admin' && (
                                             <td className="p-2 border">
