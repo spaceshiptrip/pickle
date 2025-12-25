@@ -654,7 +654,7 @@ function listApprovals_() {
   var idx = headerIndexMap_(t.header);
 
   var pending = t.rows.filter(function(r) {
-    return String(r[idx['Status']] || '').toLowerCase() === 'pending';
+    return String(r[idx['Status']] || '').trim().toLowerCase() === 'pending';
   }).map(function(r) {
     return {
       RequestId: r[idx['RequestId']],
