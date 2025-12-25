@@ -5,6 +5,7 @@ import AdminPanel from './components/AdminPanel.jsx';
 import AuthView from './components/AuthView.jsx';
 import { authApi } from './api';
 import logo from './assets/AthPicklersLogo.png';
+import spaceshiplogo from './assets/SpaceshiptripLogo.png';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -78,7 +79,7 @@ export default function App() {
     <div className="max-w-5xl mx-auto p-4 font-sans text-gray-900">
       <div className="flex flex-col items-center sm:flex-row sm:justify-between mb-6 border-b pb-4 gap-4">
         <div className="flex flex-col items-center sm:flex-row gap-2 sm:gap-4">
-          <img src={logo} alt="Athenaeum Picklers Logo" className="h-4 w-4 sm:h-6 sm:w-6 object-contain" />
+          <img src={logo} alt="Athenaeum Picklers Logo" className="h-10 w-10 sm:h-14 sm:w-14 object-contain" />
           <div className="text-center sm:text-left">
             <h1 className="text-lg sm:text-2xl font-black text-blue-900 uppercase tracking-tighter leading-none">Pickleball Schedule</h1>
             <p className="text-[10px] sm:text-xs text-gray-500 mt-1">Welcome back, <span className="font-bold text-indigo-600">{user.name}</span></p>
@@ -109,7 +110,7 @@ export default function App() {
       {user.role === 'admin' && <AdminPanel />}
 
       <div className="mt-12 text-center text-sm text-gray-400 pb-8 flex flex-col items-center gap-2">
-        <img src={logo} alt="Logo" className="h-6 w-6 opacity-40 grayscale" />
+        <img src={spaceshiplogo} alt="Logo" className="h-8 w-8 opacity-90 grayscale" />
         <div>
           <a href="https://github.com/spaceshiptrip/pickle" target="_blank" rel="noreferrer" className="hover:underline text-gray-500">Too Complex Pickle Check-in App</a> · <a href="https://opensource.org/licenses/MIT" target="_blank" rel="noreferrer" className="hover:underline text-gray-500">Open Source</a> · <a href="https://github.com/spaceshiptrip" target="_blank" rel="noreferrer" className="hover:underline text-gray-500">SpaceshipTrip ツ</a> · <a href="https://nadabarkada.com" target="_blank" rel="noreferrer" className="hover:underline text-gray-500">Athenaeum Picklers</a>
         </div>
