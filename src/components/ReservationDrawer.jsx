@@ -35,14 +35,19 @@ export default function ReservationDrawer({ reservation, onClose, role }) {
 
     async function submit() {
         const names = players.map(p => p.trim()).filter(Boolean);
-        if (names.length === 0) return;
+
+        // Only admins must provide a name list.
+        // Members/guests sign up "themselves" (backend uses ctx.user.Name).
+        if (role === 'admin' && names.length === 0) return;
+
         try {
             const res = await apiPost('signup', {
                 reservationId: reservation.Id,
-                players: names,
+                ...(role === 'admin' ? { players: names } : {}), // only send players for admin
                 markPaid,
                 totalAmount: total ? Number(total) : totalFees
             });
+
             if (res.ok) {
                 // refresh roster
                 const r = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
@@ -83,7 +88,7 @@ export default function ReservationDrawer({ reservation, onClose, role }) {
 
                 <div className="mt-4 border rounded p-3">
                     <div className="font-medium mb-2">Sign up</div>
-                    {players.map((p, i) => (
+                    {role === 'admin' && players.map((p, i) => (
                         <div key={i} className="flex gap-2 mb-2">
                             <input className="border rounded px-2 py-1 flex-1" placeholder="Player name" value={p} onChange={e => {
                                 const arr = [...players]; arr[i] = e.target.value; setPlayers(arr);
@@ -100,10 +105,12 @@ export default function ReservationDrawer({ reservation, onClose, role }) {
                         <input className="border rounded px-2 py-1 w-28" placeholder={String(totalFees)} value={total} onChange={e => setTotal(e.target.value)} />
                         <span className="text-sm opacity-70">= ~ ${perPlayer}/player</span>
                     </div>
-                    <label className="flex items-center gap-2 text-sm mb-2">
-                        <input type="checkbox" checked={markPaid} onChange={e => setMarkPaid(e.target.checked)} />
-                        Mark as paid now
-                    </label>
+                    {role === 'admin' && (
+                        <label className="flex items-center gap-2 text-sm mb-2">
+                            <input type="checkbox" checked={markPaid} onChange={e => setMarkPaid(e.target.checked)} />
+                            Mark as paid now
+                        </label>
+                    )}
                     <div className="flex gap-2 mt-3">
                         <button className="bg-blue-600 text-white rounded px-4 py-2 font-semibold" onClick={submit}>Submit sign-up</button>
                         <a
