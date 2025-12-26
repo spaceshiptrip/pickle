@@ -54,9 +54,11 @@ input[type="text"],
 input[type="password"],
 input[type="number"],
 input[type="date"],
+input[type="time"],
 textarea {
   width: 100%;
   padding: 0.55rem 0.7rem;
+  min-height: 2.5rem;
   border-radius: 0.5rem;
   border: 1px solid #ccc;
   font-size: 0.95rem;
