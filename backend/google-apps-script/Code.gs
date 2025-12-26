@@ -702,13 +702,13 @@ function rowToUser_(header, row, idx) {
   var active = (String(activeRaw).trim() === '1' || String(activeRaw).toLowerCase() === 'true');
 
   return {
-    UserId: String(row[idx['UserId']]),
-    Role: String(row[idx['Role']]).toLowerCase(),
-    Name: row[idx['Name']],
+    UserId: String(row[idx['UserId']] || '').trim(),
+    Role: String(row[idx['Role']] || '').trim().toLowerCase(),
+    Name: String(row[idx['Name']] || '').trim(),
     Phone: normalizePhone_(row[idx['Phone']]),
     Email: normalizeEmail_(row[idx['Email']]),
-    Venmo: row[idx['Venmo']],
-    PinHash: row[idx['PinHash']],
+    Venmo: String(row[idx['Venmo']] || '').trim(),
+    PinHash: String(row[idx['PinHash']] || '').trim(),
     Active: active
   };
 }
