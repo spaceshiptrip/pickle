@@ -1,9 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { apiGet, apiPost } from '../api';
 
-export default function AdminPanel() {
+const COURT_OPTIONS = ['North', 'South', 'Other'];
+
+export default function AdminPanel({ editReservation, onSaveSuccess }) {
     const [reservations, setReservations] = useState([]);
-    const [form, setForm] = useState({ Date: '', Start: '', End: '', Court: '1', Capacity: 8, BaseFee: 5 });
+    const [form, setForm] = useState({
+        Date: '',
+        Start: '',
+        End: '',
+        Court: 'North', // <-- default
+        Capacity: 8,
+        BaseFee: 5,
+    });
+
+    // For "Other" court text entry (kept separate so we can still store final value in form.Court)
+    const [courtOther, setCourtOther] = useState('');
+
     const [fee, setFee] = useState({ ReservationId: '', FeeName: 'Dinner', Amount: 10 });
     const [loading, setLoading] = useState(false);
 
@@ -17,16 +30,38 @@ export default function AdminPanel() {
     const [approvalsLoading, setApprovalsLoading] = useState(false);
     const [approvalsError, setApprovalsError] = useState('');
 
+    // When editReservation prop changes, pre-fill the form and scroll into view
+    useEffect(() => {
+        if (editReservation) {
+            setForm({
+                Id: editReservation.Id,
+                Date: editReservation.Date,
+                Start: editReservation.Start,
+                End: editReservation.End,
+                Court: editReservation.Court,
+                Capacity: editReservation.Capacity || 8,
+                BaseFee: editReservation.BaseFee || 5,
+            });
+            // Scroll to the admin panel form
+            document.getElementById('admin-reservation-form')?.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [editReservation]);
+
     async function load() {
         setLoading(true);
         try {
             const r = await apiGet({ action: 'listreservations' });
             if (r.ok) setReservations(r.reservations);
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error(e);
+        }
         setLoading(false);
         loadApprovals();
     }
-    useEffect(() => { load(); }, []);
+
+    useEffect(() => {
+        load();
+    }, []);
 
     async function loadApprovals() {
         setApprovalsLoading(true);
@@ -46,37 +81,53 @@ export default function AdminPanel() {
     }
 
     async function approveGuest(requestId) {
-        if (!confirm("Are you sure you want to approve this guest?")) return;
+        if (!confirm('Are you sure you want to approve this guest?')) return;
         try {
             const r = await apiPost('approveguest', { requestId });
             if (r.ok) {
-                alert("Guest approved!");
+                alert('Guest approved!');
                 loadApprovals();
             }
-        } catch (e) { alert("Error: " + e.message); }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
     }
 
     async function loadReport() {
         if (!reportMonth) return;
         setReportLoading(true);
         try {
-            // Fetch all attendance for the month
             const r = await apiGet({ action: 'listattendance', month: reportMonth });
             if (r.ok) setReportData(r.attendees);
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error(e);
+        }
         setReportLoading(false);
     }
 
     async function saveReservation() {
-        if (!form.Date || !form.Start || !form.End) return alert("Missing fields");
+        if (!form.Date || !form.Start || !form.End) return alert('Missing fields');
+
+        // If "Other" selected, ensure they typed something and persist that into Court
+        let payload = { ...form };
+        if (payload.Court === 'Other') {
+            const typed = (courtOther || '').trim();
+            if (!typed) return alert('Please enter a court name for "Other".');
+            payload.Court = typed;
+        }
+
         try {
-            const r = await apiPost('upsertreservation', form);
+            const r = await apiPost('upsertreservation', payload);
             if (r.ok) {
-                setForm({ Date: '', Start: '', End: '', Court: '1', Capacity: 8, BaseFee: 5 });
+                setForm({ Date: '', Start: '', End: '', Court: 'North', Capacity: 8, BaseFee: 5 });
+                setCourtOther('');
                 load();
-                alert("Reservation saved!");
+                if (onSaveSuccess) onSaveSuccess();
+                alert('Reservation saved!');
             }
-        } catch (e) { alert("Error: " + e.message); }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
     }
 
     async function addFee() {
@@ -86,94 +137,208 @@ export default function AdminPanel() {
             if (r.ok) {
                 setFee({ ReservationId: '', FeeName: 'Dinner', Amount: 10 });
                 load();
-                alert("Fee added!");
+                alert('Fee added!');
             }
-        } catch (e) { alert("Error: " + e.message); }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
     }
 
     const reportStats = useMemo(() => {
         const totalPlayers = reportData.length;
-        const uniquePlayers = new Set(reportData.map(r => r.Player)).size;
+        const uniquePlayers = new Set(reportData.map((r) => r.Player)).size;
         const totalCollected = reportData.reduce((acc, r) => acc + (r.Charge || 0), 0);
-        const unpaidCount = reportData.filter(r => !r.PAID).length;
+        const unpaidCount = reportData.filter((r) => !r.PAID).length;
         return { totalPlayers, uniquePlayers, totalCollected, unpaidCount };
     }, [reportData]);
 
-    // Copy helper
     const copyToClipboard = (text) => {
         navigator.clipboard.writeText(text);
-        alert("Copied to clipboard!");
+        alert('Copied to clipboard!');
     };
 
     return (
         <div className="mt-8 border rounded p-3 bg-gray-50">
             <div className="flex justify-between items-center mb-3">
                 <div className="font-semibold text-lg">Organizer Admin</div>
-                <button onClick={load} className="text-xs border px-2 py-1 rounded bg-white">Refresh Data</button>
+                <button onClick={load} className="text-xs border px-2 py-1 rounded bg-white">
+                    Refresh Data
+                </button>
             </div>
 
             <div className="grid sm:grid-cols-2 gap-4 mb-6">
                 {/* Reservation Form */}
-                <div className="border rounded p-3 bg-white shadow-sm">
+                <div id="admin-reservation-form" className="border rounded p-3 bg-white shadow-sm">
                     <div className="font-medium mb-2 text-blue-800">Create / Update Reservation</div>
+
                     <div className="grid grid-cols-2 gap-2">
-                        <input className="border rounded px-2 py-1 col-span-2" placeholder="(optional) Id to update exisitng" value={form.Id || ''} onChange={e => setForm({ ...form, Id: e.target.value })} />
+                        <input
+                            className="border rounded px-2 py-1 col-span-2"
+                            placeholder="(optional) Id to update exisitng"
+                            value={form.Id || ''}
+                            onChange={(e) => setForm({ ...form, Id: e.target.value })}
+                        />
 
                         <div className="col-span-2">
                             <label className="block text-xs text-gray-500">Date</label>
-                            <input className="border rounded px-2 py-1 w-full" type="date" value={form.Date} onChange={e => setForm({ ...form, Date: e.target.value })} />
+                            <input
+                                className="border rounded px-2 py-1 w-full"
+                                type="date"
+                                value={form.Date}
+                                onChange={(e) => setForm({ ...form, Date: e.target.value })}
+                            />
                         </div>
 
                         <div>
                             <label className="block text-xs text-gray-500">Start</label>
-                            <input className="border rounded px-2 py-1 w-full" type="time" value={form.Start} onChange={e => setForm({ ...form, Start: e.target.value })} />
-                        </div>
-                        <div>
-                            <label className="block text-xs text-gray-500">End</label>
-                            <input className="border rounded px-2 py-1 w-full" type="time" value={form.End} onChange={e => setForm({ ...form, End: e.target.value })} />
+                            <input
+                                className="border rounded px-2 py-1 w-full"
+                                type="time"
+                                value={form.Start}
+                                onChange={(e) => setForm({ ...form, Start: e.target.value })}
+                            />
                         </div>
 
                         <div>
+                            <label className="block text-xs text-gray-500">End</label>
+                            <input
+                                className="border rounded px-2 py-1 w-full"
+                                type="time"
+                                value={form.End}
+                                onChange={(e) => setForm({ ...form, End: e.target.value })}
+                            />
+                        </div>
+
+                        {/* ✅ Court dropdown + conditional "Other" input */}
+                        <div className="col-span-2">
                             <label className="block text-xs text-gray-500">Court</label>
-                            <input className="border rounded px-2 py-1 w-full" placeholder="Court" value={form.Court} onChange={e => setForm({ ...form, Court: e.target.value })} />
+                            <div className="flex gap-2">
+                                <select
+                                    className="border rounded px-2 py-1 w-full"
+                                    value={COURT_OPTIONS.includes(form.Court) ? form.Court : 'Other'}
+                                    onChange={(e) => {
+                                        const next = e.target.value;
+                                        setForm({ ...form, Court: next });
+
+                                        // If switching away from Other, clear the other input
+                                        if (next !== 'Other') setCourtOther('');
+                                    }}
+                                >
+                                    {COURT_OPTIONS.map((opt) => (
+                                        <option key={opt} value={opt}>
+                                            {opt}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                {(() => {
+                                    // If form.Court contains a custom court name (not one of the options),
+                                    // treat it as "Other" and show it in the text box.
+                                    const isOtherSelected =
+                                        form.Court === 'Other' || (form.Court && !COURT_OPTIONS.includes(form.Court));
+
+                                    if (!isOtherSelected) return null;
+
+                                    const shownValue =
+                                        form.Court !== 'Other' && !COURT_OPTIONS.includes(form.Court) ? form.Court : courtOther;
+
+                                    return (
+                                        <input
+                                            className="border rounded px-2 py-1 w-full"
+                                            placeholder="Enter court name"
+                                            value={shownValue}
+                                            onChange={(e) => {
+                                                const v = e.target.value;
+                                                setCourtOther(v);
+                                                // Keep dropdown selection as "Other" while typing
+                                                setForm({ ...form, Court: 'Other' });
+                                            }}
+                                        />
+                                    );
+                                })()}
+                            </div>
                         </div>
 
                         <div>
                             <label className="block text-xs text-gray-500">Capacity</label>
-                            <input className="border rounded px-2 py-1 w-full" placeholder="Capacity" type="number" value={form.Capacity} onChange={e => setForm({ ...form, Capacity: Number(e.target.value) })} />
+                            <input
+                                className="border rounded px-2 py-1 w-full"
+                                placeholder="Capacity"
+                                type="number"
+                                value={form.Capacity}
+                                onChange={(e) => setForm({ ...form, Capacity: Number(e.target.value) })}
+                            />
                         </div>
 
                         <div className="col-span-2">
                             <label className="block text-xs text-gray-500">Base Fee ($)</label>
-                            <input className="border rounded px-2 py-1 w-full" placeholder="BaseFee" type="number" value={form.BaseFee} onChange={e => setForm({ ...form, BaseFee: Number(e.target.value) })} />
+                            <input
+                                className="border rounded px-2 py-1 w-full"
+                                placeholder="BaseFee"
+                                type="number"
+                                value={form.BaseFee}
+                                onChange={(e) => setForm({ ...form, BaseFee: Number(e.target.value) })}
+                            />
                         </div>
                     </div>
-                    <button className="border rounded px-3 py-1 mt-3 w-full bg-blue-600 text-white font-semibold hover:bg-blue-700" onClick={saveReservation}>Save Reservation</button>
+
+                    <button
+                        className="border rounded px-3 py-1 mt-3 w-full bg-blue-600 text-white font-semibold hover:bg-blue-700"
+                        onClick={saveReservation}
+                    >
+                        Save Reservation
+                    </button>
                 </div>
 
                 {/* Fees Form */}
                 <div className="border rounded p-3 bg-white shadow-sm">
                     <div className="font-medium mb-2 text-green-800">Add Extra Fee (e.g., Dinner)</div>
+
                     <div className="mb-2">
                         <label className="block text-xs text-gray-500">Select Reservation</label>
-                        <select className="border rounded px-2 py-1 w-full" value={fee.ReservationId} onChange={e => setFee({ ...fee, ReservationId: e.target.value })}>
+                        <select
+                            className="border rounded px-2 py-1 w-full"
+                            value={fee.ReservationId}
+                            onChange={(e) => setFee({ ...fee, ReservationId: e.target.value })}
+                        >
                             <option value="">Select reservation…</option>
-                            {reservations.map(r => (
-                                <option key={r.Id} value={r.Id}>{r.Date} {r.Start}-{r.End} (Ct {r.Court})</option>
+                            {reservations.map((r) => (
+                                <option key={r.Id} value={r.Id}>
+                                    {r.Date} {r.Start}-{r.End} (Ct {r.Court})
+                                </option>
                             ))}
                         </select>
                     </div>
+
                     <div className="flex gap-2">
                         <div className="flex-1">
                             <label className="block text-xs text-gray-500">Fee Name</label>
-                            <input className="border rounded px-2 py-1 w-full" placeholder="Dinner" value={fee.FeeName} onChange={e => setFee({ ...fee, FeeName: e.target.value })} />
+                            <input
+                                className="border rounded px-2 py-1 w-full"
+                                placeholder="Dinner"
+                                value={fee.FeeName}
+                                onChange={(e) => setFee({ ...fee, FeeName: e.target.value })}
+                            />
                         </div>
                         <div className="w-24">
                             <label className="block text-xs text-gray-500">Amount ($)</label>
-                            <input className="border rounded px-2 py-1 w-full" type="number" step="0.01" placeholder="10" value={fee.Amount} onChange={e => setFee({ ...fee, Amount: Number(e.target.value) })} />
+                            <input
+                                className="border rounded px-2 py-1 w-full"
+                                type="number"
+                                step="0.01"
+                                placeholder="10"
+                                value={fee.Amount}
+                                onChange={(e) => setFee({ ...fee, Amount: Number(e.target.value) })}
+                            />
                         </div>
                     </div>
-                    <button className="border rounded px-3 py-1 mt-3 w-full bg-green-600 text-white font-semibold hover:bg-green-700" onClick={addFee}>Add Fee</button>
+
+                    <button
+                        className="border rounded px-3 py-1 mt-3 w-full bg-green-600 text-white font-semibold hover:bg-green-700"
+                        onClick={addFee}
+                    >
+                        Add Fee
+                    </button>
 
                     <div className="mt-4 text-xs text-gray-500">
                         <p>Use this to add shared costs like balls, lights, or post-game food to a specific session.</p>
@@ -186,8 +351,16 @@ export default function AdminPanel() {
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="font-semibold text-lg">Monthly Report</h3>
                     <div className="flex gap-2 items-center">
-                        <input type="month" className="border rounded px-2 py-1" value={reportMonth} onChange={e => setReportMonth(e.target.value)} />
-                        <button onClick={loadReport} className="bg-gray-800 text-white px-3 py-1 rounded text-sm hover:bg-black">
+                        <input
+                            type="month"
+                            className="border rounded px-2 py-1"
+                            value={reportMonth}
+                            onChange={(e) => setReportMonth(e.target.value)}
+                        />
+                        <button
+                            onClick={loadReport}
+                            className="bg-gray-800 text-white px-3 py-1 rounded text-sm hover:bg-black"
+                        >
                             {reportLoading ? 'Loading...' : 'Load Report'}
                         </button>
                     </div>
@@ -215,7 +388,12 @@ export default function AdminPanel() {
                         </div>
 
                         <div className="flex justify-end mb-2">
-                            <button onClick={() => copyToClipboard(reportStats.totalCollected.toFixed(2))} className="text-xs text-blue-600 underline">Copy Total ($)</button>
+                            <button
+                                onClick={() => copyToClipboard(reportStats.totalCollected.toFixed(2))}
+                                className="text-xs text-blue-600 underline"
+                            >
+                                Copy Total ($)
+                            </button>
                         </div>
 
                         <div className="max-h-60 overflow-y-auto border rounded">
@@ -248,7 +426,9 @@ export default function AdminPanel() {
             <div className="border-t pt-4 mt-6">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="font-semibold text-lg">Pending Guest Approvals</h3>
-                    <button onClick={loadApprovals} className="text-xs border px-2 py-1 rounded bg-white">Refresh Approvals</button>
+                    <button onClick={loadApprovals} className="text-xs border px-2 py-1 rounded bg-white">
+                        Refresh Approvals
+                    </button>
                 </div>
 
                 <div className="bg-white p-4 rounded shadow-sm border">
@@ -257,6 +437,7 @@ export default function AdminPanel() {
                             ⚠️ Error: {approvalsError}
                         </div>
                     )}
+
                     {approvalsLoading ? (
                         <div className="text-center py-4 text-gray-500">Loading requests...</div>
                     ) : approvals.length === 0 ? (
