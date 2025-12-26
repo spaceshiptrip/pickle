@@ -983,7 +983,11 @@ function normalizeEmail_(s) {
 }
 
 function normalizePhone_(s) {
-  if (!s) return '';
+  if (s === undefined || s === null || s === '') return '';
+  // If it's a number (likely from Sheets), format it to avoid scientific notation (e.g., 6.26E+09)
+  if (typeof s === 'number') {
+    s = s.toFixed(0);
+  }
   var digits = String(s).replace(/[^\d]/g, '');
   // Allow US 10-digit, or 11-digit starting with 1
   if (digits.length === 11 && digits[0] === '1') digits = digits.substring(1);
