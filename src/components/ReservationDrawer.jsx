@@ -174,9 +174,10 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
                         <button
                             onClick={onClose}
-                            className="text-sm font-bold px-3 py-1 bg-black text-white rounded hover:bg-gray-900"
+                            className="flex items-center gap-2 text-sm font-bold px-3 py-1 bg-black text-white rounded hover:bg-gray-900 transition-colors"
                         >
-                            Close
+                            <span>✕</span>
+                            <span>Close</span>
                         </button>
                     </div>
                 </div>
