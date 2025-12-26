@@ -24,6 +24,8 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
         return (Number(reservation.BaseFee) || 0) + fees;
     }, [reservation]);
 
+    const isAdmin = role?.toLowerCase() === 'admin';
+
     // Load roster
     useEffect(() => {
         (async () => {
@@ -38,7 +40,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
     // Load user list for admin dropdown
     useEffect(() => {
-        if (role !== 'admin') return;
+        if (role?.toLowerCase() !== 'admin') return;
 
         (async () => {
             try {
@@ -66,7 +68,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
         // compute count of valid names (for admin, respect Other typed values)
         let count = 1;
-        if (role === 'admin') {
+        if (role?.toLowerCase() === 'admin') {
             const resolved = players
                 .map((p, i) => {
                     const v = (p || '').trim();
@@ -98,7 +100,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
     async function submit() {
         // resolve admin names
         const names =
-            role === 'admin'
+            role?.toLowerCase() === 'admin'
                 ? players
                     .map((p, i) => {
                         const v = (p || '').trim();
@@ -109,10 +111,11 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                     .filter(Boolean)
                 : [];
 
-        if (role === 'admin' && names.length === 0) return;
+        const isAdmin = role?.toLowerCase() === 'admin';
+        if (isAdmin && names.length === 0) return;
 
         // Validate any "Other" rows
-        if (role === 'admin') {
+        if (isAdmin) {
             const hasOtherMissing = players.some((p, i) => p === 'Other' && !(playerOthers[i] || '').trim());
             if (hasOtherMissing) return alert('Please fill in the name for any "Other" player.');
         }
@@ -120,7 +123,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
         try {
             const res = await apiPost('signup', {
                 reservationId: reservation.Id,
-                ...(role === 'admin' ? { players: names } : {}),
+                ...(isAdmin ? { players: names } : {}),
                 markPaid,
                 totalAmount: total ? Number(total) : totalFees,
             });
@@ -197,7 +200,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                     <div className="font-medium mb-2">Sign up</div>
 
                     {/* Admin: player list dropdowns */}
-                    {role === 'admin' &&
+                    {isAdmin &&
                         players.map((p, i) => {
                             const isOther = p === 'Other';
 
@@ -320,7 +323,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                                     <th className="p-2 border text-left">Player</th>
                                     <th className="p-2 border text-left">Charge</th>
                                     <th className="p-2 border text-left">Paid</th>
-                                    {role === 'admin' && <th className="p-2 border text-left">Actions</th>}
+                                    {isAdmin && <th className="p-2 border text-left">Actions</th>}
                                 </tr>
                             </thead>
                             <tbody>
@@ -340,7 +343,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                                                 <span className="text-gray-400 italic">Private</span>
                                             )}
                                         </td>
-                                        {role === 'admin' && (
+                                        {isAdmin && (
                                             <td className="p-2 border">
                                                 <button
                                                     className="border rounded px-2 py-0.5 mr-1 bg-white hover:bg-gray-50"
@@ -360,7 +363,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                                 ))}
                                 {roster.length === 0 && (
                                     <tr>
-                                        <td colSpan={role === 'admin' ? 4 : 3} className="p-4 text-center text-gray-500">
+                                        <td colSpan={isAdmin ? 4 : 3} className="p-4 text-center text-gray-500">
                                             No sign-ups yet
                                         </td>
                                     </tr>

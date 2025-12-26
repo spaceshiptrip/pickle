@@ -30,13 +30,13 @@ function doGet(e) {
   if (action === 'listreservations') {
     var ctx = requireAuth_(e, null);
     // allow all roles
-    requireRole_(ctx, ['admin','member','guest']);
-    return json_(listReservations());
+    requireRole_(ctx, ['admin', 'memberplus', 'member', 'guest']);
+    return json_(listReservations(ctx.role));
   }
 
   if (action === 'listattendance') {
     var ctx2 = requireAuth_(e, null);
-    requireRole_(ctx2, ['admin','member','guest']);
+    requireRole_(ctx2, ['admin', 'memberplus', 'member', 'guest']);
     return json_(listAttendance_(e, ctx2));
   }
 
@@ -60,7 +60,7 @@ function doGet(e) {
 
   if (action === 'listusers') {
     var ctxUsers = requireAuth_(e, null);
-    requireRole_(ctxUsers, ['admin', 'member']); // <-- guests don't need the full roster
+    requireRole_(ctxUsers, ['admin', 'memberplus']); // <-- guests/basic members don't need the full roster
     return json_(listUsers_(ctxUsers));
   }
 
@@ -72,7 +72,11 @@ function doPost(e) {
   var action = getAction_(e, payload);
 
   // Existing POST actions
-  if (action === 'signup') return json_(signup_(payload, requireAuth_(e, payload)));
+  if (action === 'signup') {
+    var ctxSignup = requireAuth_(e, payload);
+    requireRole_(ctxSignup, ['admin', 'memberplus', 'member', 'guest']);
+    return json_(signup_(payload, ctxSignup));
+  }
 
   if (action === 'markpaid') {
     var ctx = requireAuth_(e, payload);
@@ -252,7 +256,8 @@ function nextReservationId_() {
 }
 
 /** -------- API impl (existing) -------- */
-function listReservations() {
+function listReservations(userRole) {
+  userRole = String(userRole || 'guest').toLowerCase();
   var rs = sheetByName(RESERVATIONS_SHEET_NAME);
   var fs = sheetByName(FEES_SHEET_NAME);
   var rt = readTable_(rs);
@@ -293,6 +298,22 @@ function listReservations() {
       Fees: feesByRes[id] || []
     };
   });
+
+  // Filter for restricted roles
+  if (userRole === 'member' || userRole === 'guest') {
+    var now = new Date();
+    // Sort items by date and start time to find the "next" one
+    items.sort(function(a, b) {
+      return a.Date.localeCompare(b.Date) || a.Start.localeCompare(b.Start);
+    });
+
+    var nextEvent = items.find(function(item) {
+      var eventStart = new Date(item.Date + 'T' + item.Start + ':00');
+      return eventStart >= now;
+    });
+
+    items = nextEvent ? [nextEvent] : [];
+  }
 
   return { ok: true, reservations: items };
 }
@@ -505,7 +526,8 @@ function auth_loginWithPin_(payload) {
 
   var user = findUserByPhone_(phone);
   if (!user || !user.Active) return { ok: false, error: 'invalid_login' };
-  if (user.Role !== 'admin' && user.Role !== 'member') return { ok: false, error: 'invalid_login' };
+  var role = String(user.Role || '').toLowerCase();
+  if (role !== 'admin' && role !== 'memberplus' && role !== 'member') return { ok: false, error: 'invalid_login' };
 
   if (!verifyPin_(pin, user.PinHash)) return { ok: false, error: 'invalid_login' };
 
@@ -601,7 +623,7 @@ function listUsers_(ctx) {
 
       // Keep dropdown clean: only show players that are real members/admins
       // (Change to include guests if you want: role === 'guest')
-      return (u.role === 'admin' || u.role === 'member');
+      return (u.role === 'admin' || u.role === 'memberplus' || u.role === 'member');
     })
     .map(function(u) { return { Name: u.name }; });
 
@@ -680,13 +702,13 @@ function rowToUser_(header, row, idx) {
   var active = (String(activeRaw).trim() === '1' || String(activeRaw).toLowerCase() === 'true');
 
   return {
-    UserId: String(row[idx['UserId']]),
-    Role: String(row[idx['Role']]).toLowerCase(),
-    Name: row[idx['Name']],
+    UserId: String(row[idx['UserId']] || '').trim(),
+    Role: String(row[idx['Role']] || '').trim().toLowerCase(),
+    Name: String(row[idx['Name']] || '').trim(),
     Phone: normalizePhone_(row[idx['Phone']]),
     Email: normalizeEmail_(row[idx['Email']]),
-    Venmo: row[idx['Venmo']],
-    PinHash: row[idx['PinHash']],
+    Venmo: String(row[idx['Venmo']] || '').trim(),
+    PinHash: String(row[idx['PinHash']] || '').trim(),
     Active: active
   };
 }
@@ -961,7 +983,11 @@ function normalizeEmail_(s) {
 }
 
 function normalizePhone_(s) {
-  if (!s) return '';
+  if (s === undefined || s === null || s === '') return '';
+  // If it's a number (likely from Sheets), format it to avoid scientific notation (e.g., 6.26E+09)
+  if (typeof s === 'number') {
+    s = s.toFixed(0);
+  }
   var digits = String(s).replace(/[^\d]/g, '');
   // Allow US 10-digit, or 11-digit starting with 1
   if (digits.length === 11 && digits[0] === '1') digits = digits.substring(1);
