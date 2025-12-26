@@ -7,6 +7,7 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
     const isAdmin = role?.toLowerCase() === 'admin';
     const isMemberPlus = role?.toLowerCase() === 'memberplus';
 
+    // Form state for Proposed Dates (Issue #31)
     const [reservations, setReservations] = useState([]);
     const [form, setForm] = useState({
         Id: '',

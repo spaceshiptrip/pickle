@@ -460,6 +460,10 @@ function markPaid_(payload) {
   return { ok: false, error: 'player_not_found' };
 }
 
+/** 
+ * Upserts a reservation.
+ * Recommends: "Status" column in "Reservations" sheet (Issue #31)
+ */
 function upsertReservation_(payload) {
   var sh = sheetByName(RESERVATIONS_SHEET_NAME);
   var row = {

@@ -14,6 +14,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
     const [markPaid, setMarkPaid] = useState(false);
 
     const isAdmin = role?.toLowerCase() === 'admin';
+    // Proposed Dates feature (Issue #31)
     const isProposed = reservation.Status === 'proposed';
 
     // Lock page scroll while modal is open (prevents the “scroll behind” trap)
