@@ -160,13 +160,13 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                     </h2>
 
                     <div className="flex items-center gap-2">
-                        {role === 'admin' && (
+                        {role?.toLowerCase() === 'admin' && (
                             <button
                                 onClick={() => {
                                     if (onEditReservation) return onEditReservation(reservation);
                                     alert('Edit (admin) clicked — wire onEditReservation() when ready.');
                                 }}
-                                className="text-sm font-bold px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                                className="text-xs font-black uppercase tracking-widest px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded hover:bg-indigo-100 transition-colors"
                             >
                                 Edit
                             </button>
