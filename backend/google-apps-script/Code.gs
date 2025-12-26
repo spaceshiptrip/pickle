@@ -58,6 +58,12 @@ function doGet(e) {
     return json_(listApprovals_());
   }
 
+  if (action === 'listusers') {
+    var ctxUsers = requireAuth_(e, null);
+    requireRole_(ctxUsers, ['admin', 'member']); // <-- guests don't need the full roster
+    return json_(listUsers_(ctxUsers));
+  }
+
   return json_({ ok: false, error: 'unknown_action' }, 400);
 }
 
@@ -572,6 +578,46 @@ function auth_logout_(payload) {
 }
 
 /** -------- Users helpers -------- */
+function listUsers_(ctx) {
+  var t = readTable_(sheetByName(USERS_SHEET_NAME));
+  if (!t.header || t.header.length === 0) return { ok: true, users: [] };
+
+  var idx = headerIndexMap_(t.header);
+
+  // Only expose names of active member/admin users (and optionally active guests if you want)
+  var rows = t.rows
+    .map(function(r) {
+      var activeRaw = r[idx['Active']];
+      var active = (String(activeRaw).trim() === '1' || String(activeRaw).toLowerCase() === 'true');
+
+      var role = String(r[idx['Role']] || '').toLowerCase();
+      var name = String(r[idx['Name']] || '').trim();
+
+      return { active: active, role: role, name: name };
+    })
+    .filter(function(u) {
+      if (!u.active) return false;
+      if (!u.name) return false;
+
+      // Keep dropdown clean: only show players that are real members/admins
+      // (Change to include guests if you want: role === 'guest')
+      return (u.role === 'admin' || u.role === 'member');
+    })
+    .map(function(u) { return { Name: u.name }; });
+
+  // Unique + sort
+  var seen = {};
+  var out = [];
+  for (var i = 0; i < rows.length; i++) {
+    var nm = rows[i].Name;
+    var key = nm.toLowerCase();
+    if (!seen[key]) { seen[key] = true; out.push({ Name: nm }); }
+  }
+  out.sort(function(a, b) { return a.Name.localeCompare(b.Name); });
+
+  return { ok: true, users: out };
+}
+
 function idxHasHeader_(header, colName) {
   for (var i = 0; i < header.length; i++) {
     if (String(header[i]).trim() === colName) return true;
