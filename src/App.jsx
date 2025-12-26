@@ -137,8 +137,9 @@ export default function App() {
           />
         )}
 
-        {user.role === 'admin' && (
+        {(user.role?.toLowerCase() === 'admin' || user.role?.toLowerCase() === 'memberplus') && (
           <AdminPanel
+            role={user.role}
             editReservation={editingReservation}
             onSaveSuccess={() => setEditingReservation(null)}
           />

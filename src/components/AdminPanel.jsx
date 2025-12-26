@@ -3,15 +3,20 @@ import { apiGet, apiPost } from '../api';
 
 const COURT_OPTIONS = ['North', 'South', 'Other'];
 
-export default function AdminPanel({ editReservation, onSaveSuccess }) {
+export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
+    const isAdmin = role?.toLowerCase() === 'admin';
+    const isMemberPlus = role?.toLowerCase() === 'memberplus';
+
     const [reservations, setReservations] = useState([]);
     const [form, setForm] = useState({
+        Id: '',
         Date: '',
         Start: '',
         End: '',
-        Court: 'North', // <-- default
+        Court: 'North',
         Capacity: 8,
         BaseFee: 5,
+        Status: 'reserved'
     });
 
     // For "Other" court text entry (kept separate so we can still store final value in form.Court)
@@ -41,6 +46,7 @@ export default function AdminPanel({ editReservation, onSaveSuccess }) {
                 Court: editReservation.Court,
                 Capacity: editReservation.Capacity || 8,
                 BaseFee: editReservation.BaseFee || 5,
+                Status: editReservation.Status || 'reserved'
             });
             // Scroll to the admin panel form
             document.getElementById('admin-reservation-form')?.scrollIntoView({ behavior: 'smooth' });
@@ -119,11 +125,11 @@ export default function AdminPanel({ editReservation, onSaveSuccess }) {
         try {
             const r = await apiPost('upsertreservation', payload);
             if (r.ok) {
-                setForm({ Date: '', Start: '', End: '', Court: 'North', Capacity: 8, BaseFee: 5 });
+                setForm({ Date: '', Start: '', End: '', Court: 'North', Capacity: 8, BaseFee: 5, Status: 'reserved' });
                 setCourtOther('');
                 load();
                 if (onSaveSuccess) onSaveSuccess();
-                alert('Reservation saved!');
+                alert(form.Id ? 'Saved!' : 'Session Created!');
             }
         } catch (e) {
             alert('Error: ' + e.message);
@@ -169,7 +175,9 @@ export default function AdminPanel({ editReservation, onSaveSuccess }) {
             <div className="grid sm:grid-cols-2 gap-4 mb-6">
                 {/* Reservation Form */}
                 <div id="admin-reservation-form" className="border rounded p-3 bg-white shadow-sm">
-                    <div className="font-medium mb-2 text-blue-800">Create / Update Reservation</div>
+                    <div className="font-medium mb-2 text-blue-800">
+                        {isAdmin ? (form.Id ? 'Edit Session' : 'Create Session') : 'Propose a Session'}
+                    </div>
 
                     <div className="grid grid-cols-2 gap-2">
                         <input
@@ -209,274 +217,287 @@ export default function AdminPanel({ editReservation, onSaveSuccess }) {
                             />
                         </div>
 
-                        {/* ✅ Court dropdown + conditional "Other" input */}
-                        <div className="col-span-2">
-                            <label className="block text-xs text-gray-500">Court</label>
-                            <div className="flex gap-2">
-                                <select
-                                    className="border rounded px-2 py-1 w-full"
-                                    value={COURT_OPTIONS.includes(form.Court) ? form.Court : 'Other'}
-                                    onChange={(e) => {
-                                        const next = e.target.value;
-                                        setForm({ ...form, Court: next });
-
-                                        // If switching away from Other, clear the other input
-                                        if (next !== 'Other') setCourtOther('');
-                                    }}
-                                >
-                                    {COURT_OPTIONS.map((opt) => (
-                                        <option key={opt} value={opt}>
-                                            {opt}
-                                        </option>
-                                    ))}
-                                </select>
-
-                                {(() => {
-                                    // If form.Court contains a custom court name (not one of the options),
-                                    // treat it as "Other" and show it in the text box.
-                                    const isOtherSelected =
-                                        form.Court === 'Other' || (form.Court && !COURT_OPTIONS.includes(form.Court));
-
-                                    if (!isOtherSelected) return null;
-
-                                    const shownValue =
-                                        form.Court !== 'Other' && !COURT_OPTIONS.includes(form.Court) ? form.Court : courtOther;
-
-                                    return (
-                                        <input
+                        {isAdmin && (
+                            <>
+                                {/* ✅ Court dropdown + conditional "Other" input */}
+                                <div className="col-span-2">
+                                    <label className="block text-xs text-gray-500">Court</label>
+                                    <div className="flex gap-2">
+                                        <select
                                             className="border rounded px-2 py-1 w-full"
-                                            placeholder="Enter court name"
-                                            value={shownValue}
+                                            value={COURT_OPTIONS.includes(form.Court) ? form.Court : 'Other'}
                                             onChange={(e) => {
-                                                const v = e.target.value;
-                                                setCourtOther(v);
-                                                // Keep dropdown selection as "Other" while typing
-                                                setForm({ ...form, Court: 'Other' });
+                                                const next = e.target.value;
+                                                setForm({ ...form, Court: next });
+                                                if (next !== 'Other') setCourtOther('');
                                             }}
-                                        />
-                                    );
-                                })()}
-                            </div>
-                        </div>
+                                        >
+                                            {COURT_OPTIONS.map((opt) => (
+                                                <option key={opt} value={opt}>
+                                                    {opt}
+                                                </option>
+                                            ))}
+                                        </select>
 
-                        <div>
-                            <label className="block text-xs text-gray-500">Capacity</label>
-                            <input
-                                className="border rounded px-2 py-1 w-full"
-                                placeholder="Capacity"
-                                type="number"
-                                value={form.Capacity}
-                                onChange={(e) => setForm({ ...form, Capacity: Number(e.target.value) })}
-                            />
-                        </div>
+                                        {(() => {
+                                            const isOtherSelected =
+                                                form.Court === 'Other' || (form.Court && !COURT_OPTIONS.includes(form.Court));
+                                            if (!isOtherSelected) return null;
+                                            const shownValue =
+                                                form.Court !== 'Other' && !COURT_OPTIONS.includes(form.Court) ? form.Court : courtOther;
+                                            return (
+                                                <input
+                                                    className="border rounded px-2 py-1 w-full"
+                                                    placeholder="Enter court name"
+                                                    value={shownValue}
+                                                    onChange={(e) => {
+                                                        const v = e.target.value;
+                                                        setCourtOther(v);
+                                                        setForm({ ...form, Court: 'Other' });
+                                                    }}
+                                                />
+                                            );
+                                        })()}
+                                    </div>
+                                </div>
 
-                        <div className="col-span-2">
-                            <label className="block text-xs text-gray-500">Base Fee ($)</label>
-                            <input
-                                className="border rounded px-2 py-1 w-full"
-                                placeholder="BaseFee"
-                                type="number"
-                                value={form.BaseFee}
-                                onChange={(e) => setForm({ ...form, BaseFee: Number(e.target.value) })}
-                            />
-                        </div>
+                                <div>
+                                    <label className="block text-xs text-gray-500">Capacity</label>
+                                    <input
+                                        className="border rounded px-2 py-1 w-full"
+                                        placeholder="Capacity"
+                                        type="number"
+                                        value={form.Capacity}
+                                        onChange={(e) => setForm({ ...form, Capacity: Number(e.target.value) })}
+                                    />
+                                </div>
+
+                                <div className="col-span-1">
+                                    <label className="block text-xs text-gray-500">Base Fee ($)</label>
+                                    <input
+                                        className="border rounded px-2 py-1 w-full"
+                                        placeholder="BaseFee"
+                                        type="number"
+                                        value={form.BaseFee}
+                                        onChange={(e) => setForm({ ...form, BaseFee: Number(e.target.value) })}
+                                    />
+                                </div>
+
+                                <div className="col-span-2">
+                                    <label className="block text-xs text-gray-500">Status</label>
+                                    <select
+                                        className={`border rounded px-2 py-1 w-full font-bold ${form.Status === 'proposed' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+                                            }`}
+                                        value={form.Status}
+                                        onChange={(e) => setForm({ ...form, Status: e.target.value })}
+                                    >
+                                        <option value="reserved">✅ RESERVED (Confirmed)</option>
+                                        <option value="proposed">⏳ PROPOSED (Draft)</option>
+                                    </select>
+                                </div>
+                            </>
+                        )}
                     </div>
 
                     <button
-                        className="border rounded px-3 py-1 mt-3 w-full bg-blue-600 text-white font-semibold hover:bg-blue-700"
+                        className={`border rounded px-3 py-1 mt-3 w-full font-semibold transition-colors ${isAdmin ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-amber-500 text-white hover:bg-amber-600'
+                            }`}
                         onClick={saveReservation}
                     >
-                        Save Reservation
+                        {isAdmin ? 'Save Session' : 'Submit Proposal'}
                     </button>
                 </div>
 
-                {/* Fees Form */}
-                <div className="border rounded p-3 bg-white shadow-sm">
-                    <div className="font-medium mb-2 text-green-800">Add Extra Fee (e.g., Dinner)</div>
+                {isAdmin && (
+                    <div className="border rounded p-3 bg-white shadow-sm">
+                        <div className="font-medium mb-2 text-green-800">Add Extra Fee (e.g., Dinner)</div>
 
-                    <div className="mb-2">
-                        <label className="block text-xs text-gray-500">Select Reservation</label>
-                        <select
-                            className="border rounded px-2 py-1 w-full"
-                            value={fee.ReservationId}
-                            onChange={(e) => setFee({ ...fee, ReservationId: e.target.value })}
-                        >
-                            <option value="">Select reservation…</option>
-                            {reservations.map((r) => (
-                                <option key={r.Id} value={r.Id}>
-                                    {r.Date} {r.Start}-{r.End} (Ct {r.Court})
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-
-                    <div className="flex gap-2">
-                        <div className="flex-1">
-                            <label className="block text-xs text-gray-500">Fee Name</label>
-                            <input
+                        <div className="mb-2">
+                            <label className="block text-xs text-gray-500">Select Reservation</label>
+                            <select
                                 className="border rounded px-2 py-1 w-full"
-                                placeholder="Dinner"
-                                value={fee.FeeName}
-                                onChange={(e) => setFee({ ...fee, FeeName: e.target.value })}
-                            />
-                        </div>
-                        <div className="w-24">
-                            <label className="block text-xs text-gray-500">Amount ($)</label>
-                            <input
-                                className="border rounded px-2 py-1 w-full"
-                                type="number"
-                                step="0.01"
-                                placeholder="10"
-                                value={fee.Amount}
-                                onChange={(e) => setFee({ ...fee, Amount: Number(e.target.value) })}
-                            />
-                        </div>
-                    </div>
-
-                    <button
-                        className="border rounded px-3 py-1 mt-3 w-full bg-green-600 text-white font-semibold hover:bg-green-700"
-                        onClick={addFee}
-                    >
-                        Add Fee
-                    </button>
-
-                    <div className="mt-4 text-xs text-gray-500">
-                        <p>Use this to add shared costs like balls, lights, or post-game food to a specific session.</p>
-                    </div>
-                </div>
-            </div>
-
-            {/* Monthly Report Section */}
-            <div className="border-t pt-4">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-semibold text-lg">Monthly Report</h3>
-                    <div className="flex gap-2 items-center">
-                        <input
-                            type="month"
-                            className="border rounded px-2 py-1"
-                            value={reportMonth}
-                            onChange={(e) => setReportMonth(e.target.value)}
-                        />
-                        <button
-                            onClick={loadReport}
-                            className="bg-gray-800 text-white px-3 py-1 rounded text-sm hover:bg-black"
-                        >
-                            {reportLoading ? 'Loading...' : 'Load Report'}
-                        </button>
-                    </div>
-                </div>
-
-                {reportData.length > 0 && (
-                    <div className="bg-white p-4 rounded shadow-sm">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4 text-center">
-                            <div className="p-2 bg-blue-50 rounded">
-                                <div className="text-xl font-bold text-blue-800">{reportStats.uniquePlayers}</div>
-                                <div className="text-xs text-blue-600 uppercase">Unique Players</div>
-                            </div>
-                            <div className="p-2 bg-green-50 rounded">
-                                <div className="text-xl font-bold text-green-800">${reportStats.totalCollected.toFixed(2)}</div>
-                                <div className="text-xs text-green-600 uppercase">Total Collected</div>
-                            </div>
-                            <div className="p-2 bg-gray-50 rounded">
-                                <div className="text-xl font-bold text-gray-800">{reportStats.totalPlayers}</div>
-                                <div className="text-xs text-gray-600 uppercase">Check-ins</div>
-                            </div>
-                            <div className="p-2 bg-red-50 rounded">
-                                <div className="text-xl font-bold text-red-800">{reportStats.unpaidCount}</div>
-                                <div className="text-xs text-red-600 uppercase">Unpaid</div>
-                            </div>
-                        </div>
-
-                        <div className="flex justify-end mb-2">
-                            <button
-                                onClick={() => copyToClipboard(reportStats.totalCollected.toFixed(2))}
-                                className="text-xs text-blue-600 underline"
+                                value={fee.ReservationId}
+                                onChange={(e) => setFee({ ...fee, ReservationId: e.target.value })}
                             >
-                                Copy Total ($)
-                            </button>
+                                <option value="">Select reservation…</option>
+                                {reservations.map((r) => (
+                                    <option key={r.Id} value={r.Id}>
+                                        {r.Date} {r.Start}-{r.End} (Ct {r.Court})
+                                    </option>
+                                ))}
+                            </select>
                         </div>
 
-                        <div className="max-h-60 overflow-y-auto border rounded">
-                            <table className="w-full text-sm text-left">
-                                <thead className="bg-gray-100 sticky top-0">
-                                    <tr>
-                                        <th className="p-2 border-b">Date</th>
-                                        <th className="p-2 border-b">Player</th>
-                                        <th className="p-2 border-b">Charge</th>
-                                        <th className="p-2 border-b">Paid</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {reportData.map((row, i) => (
-                                        <tr key={i} className="hover:bg-gray-50">
-                                            <td className="p-2 border-b">{row.Date ? String(row.Date).split('T')[0] : ''}</td>
-                                            <td className="p-2 border-b">{row.Player}</td>
-                                            <td className="p-2 border-b">${row.Charge}</td>
-                                            <td className="p-2 border-b text-center">{row.PAID ? '✅' : '❌'}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                        <div className="flex gap-2">
+                            <div className="flex-1">
+                                <label className="block text-xs text-gray-500">Fee Name</label>
+                                <input
+                                    className="border rounded px-2 py-1 w-full"
+                                    placeholder="Dinner"
+                                    value={fee.FeeName}
+                                    onChange={(e) => setFee({ ...fee, FeeName: e.target.value })}
+                                />
+                            </div>
+                            <div className="w-24">
+                                <label className="block text-xs text-gray-500">Amount ($)</label>
+                                <input
+                                    className="border rounded px-2 py-1 w-full"
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="10"
+                                    value={fee.Amount}
+                                    onChange={(e) => setFee({ ...fee, Amount: Number(e.target.value) })}
+                                />
+                            </div>
+                        </div>
+
+                        <button
+                            className="border rounded px-3 py-1 mt-3 w-full bg-green-600 text-white font-semibold hover:bg-green-700"
+                            onClick={addFee}
+                        >
+                            Add Fee
+                        </button>
+
+                        <div className="mt-4 text-xs text-gray-500">
+                            <p>Use this to add shared costs like balls, lights, or post-game food to a specific session.</p>
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* Approvals Section */}
-            <div className="border-t pt-4 mt-6">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-semibold text-lg">Pending Guest Approvals</h3>
-                    <button onClick={loadApprovals} className="text-xs border px-2 py-1 rounded bg-white">
-                        Refresh Approvals
-                    </button>
-                </div>
-
-                <div className="bg-white p-4 rounded shadow-sm border">
-                    {approvalsError && (
-                        <div className="p-3 mb-4 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
-                            ⚠️ Error: {approvalsError}
+            {isAdmin && (
+                <div className="border-t pt-4">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-semibold text-lg">Monthly Report</h3>
+                        <div className="flex gap-2 items-center">
+                            <input
+                                type="month"
+                                className="border rounded px-2 py-1"
+                                value={reportMonth}
+                                onChange={(e) => setReportMonth(e.target.value)}
+                            />
+                            <button
+                                onClick={loadReport}
+                                className="bg-gray-800 text-white px-3 py-1 rounded text-sm hover:bg-black"
+                            >
+                                {reportLoading ? 'Loading...' : 'Load Report'}
+                            </button>
                         </div>
-                    )}
+                    </div>
 
-                    {approvalsLoading ? (
-                        <div className="text-center py-4 text-gray-500">Loading requests...</div>
-                    ) : approvals.length === 0 ? (
-                        <div className="text-center py-4 text-gray-500 italic">No pending requests</div>
-                    ) : (
-                        <div className="max-h-60 overflow-y-auto">
-                            <table className="w-full text-sm text-left border-collapse">
-                                <thead className="bg-gray-100 sticky top-0">
-                                    <tr>
-                                        <th className="p-2 border-b">Name</th>
-                                        <th className="p-2 border-b">Email</th>
-                                        <th className="p-2 border-b">Request Date</th>
-                                        <th className="p-2 border-b text-right">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {approvals.map((req) => (
-                                        <tr key={req.RequestId} className="hover:bg-gray-50">
-                                            <td className="p-2 border-b font-medium">{req.Name}</td>
-                                            <td className="p-2 border-b text-gray-600">{req.Email}</td>
-                                            <td className="p-2 border-b text-gray-500 whitespace-nowrap">
-                                                {new Date(req.CreatedAt).toLocaleDateString()}
-                                            </td>
-                                            <td className="p-2 border-b text-right">
-                                                <button
-                                                    onClick={() => approveGuest(req.RequestId)}
-                                                    className="bg-indigo-600 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-indigo-500 transition-colors"
-                                                >
-                                                    Approve
-                                                </button>
-                                            </td>
+                    {reportData.length > 0 && (
+                        <div className="bg-white p-4 rounded shadow-sm">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4 text-center">
+                                <div className="p-2 bg-blue-50 rounded">
+                                    <div className="text-xl font-bold text-blue-800">{reportStats.uniquePlayers}</div>
+                                    <div className="text-xs text-blue-600 uppercase">Unique Players</div>
+                                </div>
+                                <div className="p-2 bg-green-50 rounded">
+                                    <div className="text-xl font-bold text-green-800">${reportStats.totalCollected.toFixed(2)}</div>
+                                    <div className="text-xs text-green-600 uppercase">Total Collected</div>
+                                </div>
+                                <div className="p-2 bg-gray-50 rounded">
+                                    <div className="text-xl font-bold text-gray-800">{reportStats.totalPlayers}</div>
+                                    <div className="text-xs text-gray-600 uppercase">Check-ins</div>
+                                </div>
+                                <div className="p-2 bg-red-50 rounded">
+                                    <div className="text-xl font-bold text-red-800">{reportStats.unpaidCount}</div>
+                                    <div className="text-xs text-red-600 uppercase">Unpaid</div>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end mb-2">
+                                <button
+                                    onClick={() => copyToClipboard(reportStats.totalCollected.toFixed(2))}
+                                    className="text-xs text-blue-600 underline"
+                                >
+                                    Copy Total ($)
+                                </button>
+                            </div>
+
+                            <div className="max-h-60 overflow-y-auto border rounded">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-gray-100 sticky top-0">
+                                        <tr>
+                                            <th className="p-2 border-b">Date</th>
+                                            <th className="p-2 border-b">Player</th>
+                                            <th className="p-2 border-b">Charge</th>
+                                            <th className="p-2 border-b">Paid</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {reportData.map((row, i) => (
+                                            <tr key={i} className="hover:bg-gray-50">
+                                                <td className="p-2 border-b">{row.Date ? String(row.Date).split('T')[0] : ''}</td>
+                                                <td className="p-2 border-b">{row.Player}</td>
+                                                <td className="p-2 border-b">${row.Charge}</td>
+                                                <td className="p-2 border-b text-center">{row.PAID ? '✅' : '❌'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     )}
                 </div>
-            </div>
+            )}
+
+            {isAdmin && (
+                <div className="border-t pt-4 mt-6">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-semibold text-lg">Pending Guest Approvals</h3>
+                        <button onClick={loadApprovals} className="text-xs border px-2 py-1 rounded bg-white">
+                            Refresh Approvals
+                        </button>
+                    </div>
+
+                    <div className="bg-white p-4 rounded shadow-sm border">
+                        {approvalsError && (
+                            <div className="p-3 mb-4 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+                                ⚠️ Error: {approvalsError}
+                            </div>
+                        )}
+
+                        {approvalsLoading ? (
+                            <div className="text-center py-4 text-gray-500">Loading requests...</div>
+                        ) : approvals.length === 0 ? (
+                            <div className="text-center py-4 text-gray-500 italic">No pending requests</div>
+                        ) : (
+                            <div className="max-h-60 overflow-y-auto">
+                                <table className="w-full text-sm text-left border-collapse">
+                                    <thead className="bg-gray-100 sticky top-0">
+                                        <tr>
+                                            <th className="p-2 border-b">Name</th>
+                                            <th className="p-2 border-b">Email</th>
+                                            <th className="p-2 border-b">Request Date</th>
+                                            <th className="p-2 border-b text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {approvals.map((req) => (
+                                            <tr key={req.RequestId} className="hover:bg-gray-50">
+                                                <td className="p-2 border-b font-medium">{req.Name}</td>
+                                                <td className="p-2 border-b text-gray-600">{req.Email}</td>
+                                                <td className="p-2 border-b text-gray-500 whitespace-nowrap">
+                                                    {new Date(req.CreatedAt).toLocaleDateString()}
+                                                </td>
+                                                <td className="p-2 border-b text-right">
+                                                    <button
+                                                        onClick={() => approveGuest(req.RequestId)}
+                                                        className="bg-indigo-600 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-indigo-500 transition-colors"
+                                                    >
+                                                        Approve
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
