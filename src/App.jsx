@@ -101,9 +101,13 @@ export default function App() {
 
           <div className="flex items-center gap-4">
             <div
-              className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest ${user.role === 'admin'
+              className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${user.role?.toLowerCase() === 'admin'
                 ? 'bg-amber-100 text-amber-700'
-                : 'bg-emerald-100 text-emerald-700'
+                : user.role?.toLowerCase() === 'memberplus'
+                  ? 'bg-indigo-100 text-indigo-700'
+                  : user.role?.toLowerCase() === 'member'
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : 'bg-slate-200 text-slate-600'
                 }`}
             >
               {user.role}

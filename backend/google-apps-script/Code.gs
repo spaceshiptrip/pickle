@@ -30,13 +30,13 @@ function doGet(e) {
   if (action === 'listreservations') {
     var ctx = requireAuth_(e, null);
     // allow all roles
-    requireRole_(ctx, ['admin','member','guest']);
-    return json_(listReservations());
+    requireRole_(ctx, ['admin', 'memberplus', 'member', 'guest']);
+    return json_(listReservations(ctx.role));
   }
 
   if (action === 'listattendance') {
     var ctx2 = requireAuth_(e, null);
-    requireRole_(ctx2, ['admin','member','guest']);
+    requireRole_(ctx2, ['admin', 'memberplus', 'member', 'guest']);
     return json_(listAttendance_(e, ctx2));
   }
 
@@ -60,7 +60,7 @@ function doGet(e) {
 
   if (action === 'listusers') {
     var ctxUsers = requireAuth_(e, null);
-    requireRole_(ctxUsers, ['admin', 'member']); // <-- guests don't need the full roster
+    requireRole_(ctxUsers, ['admin', 'memberplus']); // <-- guests/basic members don't need the full roster
     return json_(listUsers_(ctxUsers));
   }
 
@@ -72,7 +72,11 @@ function doPost(e) {
   var action = getAction_(e, payload);
 
   // Existing POST actions
-  if (action === 'signup') return json_(signup_(payload, requireAuth_(e, payload)));
+  if (action === 'signup') {
+    var ctxSignup = requireAuth_(e, payload);
+    requireRole_(ctxSignup, ['admin', 'memberplus', 'member', 'guest']);
+    return json_(signup_(payload, ctxSignup));
+  }
 
   if (action === 'markpaid') {
     var ctx = requireAuth_(e, payload);
@@ -252,7 +256,8 @@ function nextReservationId_() {
 }
 
 /** -------- API impl (existing) -------- */
-function listReservations() {
+function listReservations(userRole) {
+  userRole = String(userRole || 'guest').toLowerCase();
   var rs = sheetByName(RESERVATIONS_SHEET_NAME);
   var fs = sheetByName(FEES_SHEET_NAME);
   var rt = readTable_(rs);
@@ -293,6 +298,22 @@ function listReservations() {
       Fees: feesByRes[id] || []
     };
   });
+
+  // Filter for restricted roles
+  if (userRole === 'member' || userRole === 'guest') {
+    var now = new Date();
+    // Sort items by date and start time to find the "next" one
+    items.sort(function(a, b) {
+      return a.Date.localeCompare(b.Date) || a.Start.localeCompare(b.Start);
+    });
+
+    var nextEvent = items.find(function(item) {
+      var eventStart = new Date(item.Date + 'T' + item.Start + ':00');
+      return eventStart >= now;
+    });
+
+    items = nextEvent ? [nextEvent] : [];
+  }
 
   return { ok: true, reservations: items };
 }
@@ -505,7 +526,8 @@ function auth_loginWithPin_(payload) {
 
   var user = findUserByPhone_(phone);
   if (!user || !user.Active) return { ok: false, error: 'invalid_login' };
-  if (user.Role !== 'admin' && user.Role !== 'member') return { ok: false, error: 'invalid_login' };
+  var role = String(user.Role || '').toLowerCase();
+  if (role !== 'admin' && role !== 'memberplus' && role !== 'member') return { ok: false, error: 'invalid_login' };
 
   if (!verifyPin_(pin, user.PinHash)) return { ok: false, error: 'invalid_login' };
 
@@ -601,7 +623,7 @@ function listUsers_(ctx) {
 
       // Keep dropdown clean: only show players that are real members/admins
       // (Change to include guests if you want: role === 'guest')
-      return (u.role === 'admin' || u.role === 'member');
+      return (u.role === 'admin' || u.role === 'memberplus' || u.role === 'member');
     })
     .map(function(u) { return { Name: u.name }; });
 
