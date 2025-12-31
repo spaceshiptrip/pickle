@@ -82,44 +82,41 @@ export default function App() {
     <div className="min-h-screen flex flex-col bg-slate-50 text-gray-900">
       {/* Page content */}
       <div className="w-full max-w-5xl mx-auto p-4 font-sans flex-1">
-        <div className="flex flex-col items-center sm:flex-row sm:justify-between mb-6 border-b pb-4 gap-4">
-          <div className="flex flex-col items-center sm:flex-row gap-2 sm:gap-4">
-            <img
-              src={logo}
-              alt="Athenaeum Picklers Logo"
-              className="h-10 w-10 sm:h-14 sm:w-14 object-contain"
-            />
-            <div className="text-center sm:text-left">
-              <h1 className="text-lg sm:text-2xl font-black text-blue-900 uppercase tracking-tighter leading-none">
-                Pickleball Schedule
-              </h1>
-              <p className="text-[10px] sm:text-xs text-gray-500 mt-1">
-                Welcome back, <span className="font-bold text-indigo-600">{user.name}</span>
-              </p>
-            </div>
-          </div>
+				{/* --- START OF HEADER SECTION --- */}
+				<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #e5e7eb', paddingBottom: '1.5rem', width: '100%' }}>
+					<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+						<img
+							src={logo}
+							alt="Athenaeum Picklers Logo"
+							style={{ height: '100px', width: '100px', objectFit: 'contain' }} 
+						/>
+						<div style={{ textAlign: 'center' }}>
+							<h1 className="text-xl sm:text-3xl font-black text-blue-900 uppercase tracking-tighter leading-none">
+								Pickleball Schedule
+							</h1>
+							<p style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.25rem' }}>
+								Welcome back, <span style={{ fontWeight: 'bold', color: '#4f46e5' }}>{user.name}</span>
+							</p>
+						</div>
+					</div>
 
-          <div className="flex items-center gap-4">
-            <div
-              className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${user.role?.toLowerCase() === 'admin'
-                ? 'bg-amber-100 text-amber-700'
-                : user.role?.toLowerCase() === 'memberplus'
-                  ? 'bg-indigo-100 text-indigo-700'
-                  : user.role?.toLowerCase() === 'member'
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : 'bg-slate-200 text-slate-600'
-                }`}
-            >
-              {user.role}
-            </div>
-            <button
-              onClick={onLogout}
-              className="text-xs font-bold text-gray-400 hover:text-rose-500 transition-colors uppercase tracking-widest"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
+					<div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
+						<div
+							className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+								user.role?.toLowerCase() === 'admin' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+							}`}
+						>
+							{user.role}
+						</div>
+						<button
+							onClick={onLogout}
+							style={{ width: 'auto', background: 'transparent', color: '#9ca3af', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', padding: '0' }}
+						>
+							Logout
+						</button>
+					</div>
+				</div>
+				{/* --- END OF HEADER SECTION --- */}
 
         <div className="bg-white rounded-xl shadow-lg p-1">
           <CalendarView onSelectReservation={setSelected} />
@@ -137,8 +134,9 @@ export default function App() {
           />
         )}
 
-        {user.role === 'admin' && (
+        {(user.role?.toLowerCase() === 'admin' || user.role?.toLowerCase() === 'memberplus') && (
           <AdminPanel
+            role={user.role}
             editReservation={editingReservation}
             onSaveSuccess={() => setEditingReservation(null)}
           />
@@ -146,62 +144,29 @@ export default function App() {
       </div>
 
       {/* Footer bar (black strip across full width) */}
-      <footer className="w-full bg-black">
-        {/* Match “thickness” visually by controlling height + padding */}
-        <div className="max-w-5xl mx-auto px-4 py-3 sm:py-4">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-            {/* Left: logo in a fixed-height row so the bar thickness feels tied to it */}
-            <div className="flex items-center gap-3">
-              <img
-                src={spaceshiplogo}
-                alt="SpaceshipTrip Logo"
-                className="h-9 w-9 sm:h-10 sm:w-10 object-contain opacity-95"
-              />
-              <div className="text-xs sm:text-sm text-gray-300 leading-tight text-center sm:text-left">
-                <span className="font-semibold text-gray-100">Too Complex Pickle Check-in App</span>
-                <span className="hidden sm:inline"> · </span>
-                <span className="block sm:inline text-gray-400">Open Source</span>
-              </div>
-            </div>
+			<footer style={{ width: '100%', backgroundColor: '#000', marginTop: 'auto', padding: '1.5rem 0' }}>
+				<div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+					<div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+						<img
+							src={spaceshiplogo}
+							alt="SpaceshipTrip Logo"
+							style={{ height: '40px', width: '40px', objectFit: 'contain' }}
+						/>
+						<div style={{ textAlign: 'center' }}>
+							<span style={{ color: '#fff', fontSize: '0.75rem', fontWeight: 'bold', display: 'block' }}>Too Complex Pickle Check-in App</span>
+							<span style={{ color: '#9ca3af', fontSize: '0.7rem' }}>Open Source</span>
+						</div>
+					</div>
+					<div style={{ display: 'flex', gap: '1rem', fontSize: '0.7rem' }}>
+						 <a href="https://github.com/spaceshiptrip/pickle" style={{ color: '#9ca3af' }}>Repo</a>
+						 <a href="https://nadabarkada.com" style={{ color: '#9ca3af' }}>Athenaeum Picklers</a>
+					</div>
+				</div>
+			</footer>
+      {/* End Footer bar (black strip across full width) */}
 
-            {/* Right: links wrap nicely on mobile */}
-            <div className="text-[11px] sm:text-xs text-gray-400 text-center sm:text-right flex flex-wrap justify-center sm:justify-end gap-x-3 gap-y-1">
-              <a
-                href="https://github.com/spaceshiptrip/pickle"
-                target="_blank"
-                rel="noreferrer"
-                className="hover:underline hover:text-gray-200 transition-colors"
-              >
-                Repo
-              </a>
-              <a
-                href="https://opensource.org/licenses/MIT"
-                target="_blank"
-                rel="noreferrer"
-                className="hover:underline hover:text-gray-200 transition-colors"
-              >
-                MIT
-              </a>
-              <a
-                href="https://github.com/spaceshiptrip"
-                target="_blank"
-                rel="noreferrer"
-                className="hover:underline hover:text-gray-200 transition-colors"
-              >
-                SpaceshipTrip ツ
-              </a>
-              <a
-                href="https://nadabarkada.com"
-                target="_blank"
-                rel="noreferrer"
-                className="hover:underline hover:text-gray-200 transition-colors"
-              >
-                Athenaeum Picklers
-              </a>
-            </div>
-          </div>
-        </div>
-      </footer>
+
+
     </div>
   );
 }

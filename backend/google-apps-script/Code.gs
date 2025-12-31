@@ -86,7 +86,13 @@ function doPost(e) {
 
   if (action === 'upsertreservation') {
     var ctx2 = requireAuth_(e, payload);
-    requireRole_(ctx2, ['admin']);
+    requireRole_(ctx2, ['admin', 'memberplus']);
+
+    // If MemberPLUS, force status to 'proposed' to prevent unauthorized confirmed reservations
+    if (ctx2.role === 'memberplus') {
+      payload.Status = 'proposed';
+    }
+
     return json_(upsertReservation_(payload));
   }
 
@@ -295,6 +301,7 @@ function listReservations(userRole) {
       Court: r[rIdx['Court']],
       Capacity: Number(r[rIdx['Capacity']]) || 0,
       BaseFee: Number(r[rIdx['BaseFee']]) || 0,
+      Status: String(r[rIdx['Status']] || 'reserved').toLowerCase().trim(),
       Fees: feesByRes[id] || []
     };
   });
@@ -453,6 +460,10 @@ function markPaid_(payload) {
   return { ok: false, error: 'player_not_found' };
 }
 
+/** 
+ * Upserts a reservation.
+ * Recommends: "Status" column in "Reservations" sheet (Issue #31)
+ */
 function upsertReservation_(payload) {
   var sh = sheetByName(RESERVATIONS_SHEET_NAME);
   var row = {
@@ -462,7 +473,8 @@ function upsertReservation_(payload) {
     'End': payload.End,
     'Court': payload.Court,
     'Capacity': payload.Capacity,
-    'BaseFee': payload.BaseFee
+    'BaseFee': payload.BaseFee,
+    'Status': payload.Status || 'reserved'
   };
   upsertRowById_(sh, 'Id', row);
   return { ok: true, reservation: row };
@@ -489,6 +501,7 @@ function findReservation_(id) {
         Court: r[idx['Court']],
         Capacity: Number(r[idx['Capacity']]) || 0,
         BaseFee: Number(r[idx['BaseFee']]) || 0,
+        Status: String(r[idx['Status']] || 'reserved').toLowerCase().trim(),
         Fees: listFeesFor_(String(r[idx['Id']]))
       };
     }

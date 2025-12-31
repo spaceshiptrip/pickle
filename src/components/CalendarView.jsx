@@ -21,7 +21,17 @@ export default function CalendarView({ onSelectReservation }) {
     const events = useMemo(() => items.map(it => {
         const start = `${it.Date}T${it.Start}:00`;
         const end = `${it.Date}T${it.End}:00`;
-        return { id: it.Id, title: `Court ${it.Court} · $${it.BaseFee}`, start, end, extendedProps: it };
+        const isProposed = it.Status === 'proposed';
+
+        return {
+            id: it.Id,
+            title: isProposed ? `PROPOSED: ${it.Start}` : `Court ${it.Court} · $${it.BaseFee}`,
+            start,
+            end,
+            extendedProps: it,
+            backgroundColor: isProposed ? '#eab308' : '#1e3a8a', // text-yellow-500 vs text-blue-900 (approx)
+            borderColor: isProposed ? '#854d0e' : '#1e3a8a',
+        };
     }), [items]);
 
     return (
