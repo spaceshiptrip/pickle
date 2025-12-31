@@ -9,10 +9,18 @@ export async function apiGet(params) {
   if (sessionId) url.searchParams.set('sessionId', sessionId);
 
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+
+  console.log("apiGet URL:", url.toString());
+
   const res = await fetch(url.toString(), { method: 'GET' });
-  if (!res.ok) throw new Error('API error');
-  return res.json();
+  console.log("apiGet status:", res.status);
+
+  const data = await res.json();
+  console.log("apiGet data:", data);
+
+  return data;
 }
+
 
 export async function apiPost(action, body) {
   const sessionId = getSessionId();

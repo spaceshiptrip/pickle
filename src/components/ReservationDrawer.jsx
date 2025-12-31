@@ -48,16 +48,39 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
     }, [reservation]);
 
     // Load roster
-    useEffect(() => {
-        (async () => {
-            try {
-                const data = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
-                if (data.ok) setRoster(data.attendees);
-            } catch (e) {
-                console.error('Failed to load attendance', e);
-            }
-        })();
-    }, [reservation.Id]);
+		// useEffect(() => {
+			// (async () => {
+				// try {
+					// console.log("Fetching attendance for reservation", reservation?.Id);
+					// const data = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
+					// console.log("listattendance response:", data);
+					// if (data.ok) setRoster(data.attendees || []);
+					// else console.warn("listattendance not ok:", data);
+				// } catch (e) {
+					// console.error('Failed to load attendance', e);
+				// }
+			// })();
+		// }, [reservation?.Id]);
+
+
+		useEffect(() => {
+			let cancelled = false;
+
+			(async () => {
+				try {
+					console.log("Fetching attendance for reservation", reservation?.Id);
+					const data = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
+					console.log("listattendance response:", data);
+
+					if (!cancelled && data.ok) setRoster(data.attendees || []);
+				} catch (e) {
+					if (!cancelled) console.error('Failed to load attendance', e);
+				}
+			})();
+
+			return () => { cancelled = true; };
+		}, [reservation?.Id]);
+
 
     // Load user list for admin dropdown
     useEffect(() => {
@@ -81,6 +104,20 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
             }
         })();
     }, [isAdmin]);
+
+
+
+		// Debug: mount/unmount
+		useEffect(() => {
+			console.log("ReservationDrawer mounted", { reservationId: reservation?.Id });
+			return () => console.log("ReservationDrawer unmounted", { reservationId: reservation?.Id });
+		}, []);
+
+		// Debug: whenever roster updates
+		useEffect(() => {
+			console.log("ReservationDrawer roster updated:", roster);
+		}, [roster]);
+
 
     const allNameOptions = useMemo(() => {
         return [...(userNames || []), ...EXTRA_NAME_OPTIONS];
@@ -179,7 +216,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
             }}
         >
             {/* Centering wrapper that allows scrolling when content is tall */}
-            <div className="min-h-full flex items-center justify-center p-4 sm:p-6 py-8">
+            <div className="min-h-full flex items-center justify-center p-2 sm:p-6 py-8">
                 {/* The modal itself can be natural height; the page/backdrop scroll handles overflow */}
                 <div className={`w-full max-w-2xl rounded-xl shadow-2xl border overflow-hidden ${isProposed ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
                     {/* Sticky header ALWAYS visible within the modal while modal scrolls in backdrop */}
@@ -222,7 +259,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                     </div>
 
                     {/* Content */}
-                    <div className="px-4 py-4">
+                    <div className="px-4 py-4 pb-24">
                         {!isProposed && (
                             <div className="mt-1 text-sm bg-gray-50 p-2 rounded">
                                 <div>
@@ -359,7 +396,13 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                         <div className="mt-6">
                             <div className="font-medium mb-2">Roster</div>
                             <div className="overflow-x-auto">
-                                <table className="w-full text-sm border collapse">
+
+																// <div className="text-xs text-gray-500 mb-2">
+																	// Debug roster: {roster.length} —
+																	// {roster.map(r => r.Player).join(', ')}
+																// </div>
+
+                                <table className="w-full text-sm border">
                                     <thead>
                                         <tr className="bg-gray-50">
                                             <th className="p-2 border text-left">Player</th>
@@ -368,51 +411,51 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                                             {isAdmin && <th className="p-2 border text-left">Actions</th>}
                                         </tr>
                                     </thead>
-                                    <tbody>
-                                        {roster.map((r, idx) => (
-                                            <tr key={idx}>
-                                                <td className="p-2 border">{r.Player}</td>
-                                                <td className="p-2 border">{r.Charge !== null ? `$${r.Charge}` : '-'}</td>
-                                                <td className="p-2 border">
-                                                    {r.PAID !== null ? (
-                                                        <span
-                                                            className={`px-2 py-0.5 rounded text-xs ${r.PAID ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                                                }`}
-                                                        >
-                                                            {r.PAID ? 'Yes' : 'No'}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-gray-400 italic">Private</span>
-                                                    )}
-                                                </td>
-                                                {isAdmin && (
-                                                    <td className="p-2 border">
-                                                        <button
-                                                            className="border rounded px-2 py-0.5 mr-1 bg-white hover:bg-gray-50"
-                                                            onClick={() => setPaid(r.Player, true)}
-                                                            type="button"
-                                                        >
-                                                            Mark paid
-                                                        </button>
-                                                        <button
-                                                            className="border rounded px-2 py-0.5 bg-white hover:bg-gray-50"
-                                                            onClick={() => setPaid(r.Player, false)}
-                                                            type="button"
-                                                        >
-                                                            Unpay
-                                                        </button>
-                                                    </td>
-                                                )}
-                                            </tr>
-                                        ))}
-                                        {roster.length === 0 && (
-                                            <tr>
-                                                <td colSpan={isAdmin ? 4 : 3} className="p-4 text-center text-gray-500">
-                                                    No sign-ups yet
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
+																		<tbody>
+																			{roster.map((r) => (
+																				<tr key={`${r.ReservationId}-${r.Player}`}>
+																					<td className="p-2 border">{r.Player}</td>
+																					<td className="p-2 border">{r.Charge != null ? `$${r.Charge}` : '-'}</td>
+																					<td className="p-2 border">
+																						{r.PAID != null ? (
+																							<span className={`px-2 py-0.5 rounded text-xs ${r.PAID ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+																								{r.PAID ? 'Yes' : 'No'}
+																							</span>
+																						) : (
+																							<span className="text-gray-400 italic">Private</span>
+																						)}
+																					</td>
+
+																					{isAdmin && (
+																						<td className="p-2 border">
+																							<button
+																								className="border rounded px-2 py-0.5 mr-1 bg-white hover:bg-gray-50"
+																								onClick={() => setPaid(r.Player, true)}
+																								type="button"
+																							>
+																								Mark paid
+																							</button>
+																							<button
+																								className="border rounded px-2 py-0.5 bg-white hover:bg-gray-50"
+																								onClick={() => setPaid(r.Player, false)}
+																								type="button"
+																							>
+																								Unpay
+																							</button>
+																						</td>
+																					)}
+																				</tr>
+																			))}
+
+																			{roster.length === 0 && (
+																				<tr>
+																					<td colSpan={isAdmin ? 4 : 3} className="p-4 text-center text-gray-500">
+																						No sign-ups yet
+																					</td>
+																				</tr>
+																			)}
+																		</tbody>
+
                                 </table>
                             </div>
                         </div>
