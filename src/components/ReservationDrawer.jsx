@@ -179,7 +179,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
             }}
         >
             {/* Centering wrapper that allows scrolling when content is tall */}
-            <div className="min-h-full flex items-center justify-center p-4 sm:p-6 py-8">
+            <div className="min-h-full flex items-center justify-center p-2 sm:p-6 py-8">
                 {/* The modal itself can be natural height; the page/backdrop scroll handles overflow */}
                 <div className={`w-full max-w-2xl rounded-xl shadow-2xl border overflow-hidden ${isProposed ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
                     {/* Sticky header ALWAYS visible within the modal while modal scrolls in backdrop */}
@@ -222,7 +222,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                     </div>
 
                     {/* Content */}
-                    <div className="px-4 py-4">
+                    <div className="px-4 py-4 pb-24 overflow-y-auto">
                         {!isProposed && (
                             <div className="mt-1 text-sm bg-gray-50 p-2 rounded">
                                 <div>
