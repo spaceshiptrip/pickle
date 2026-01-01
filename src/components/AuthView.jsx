@@ -98,7 +98,7 @@ export default function AuthView({ onLoginSuccess }) {
                                     value={phone}
                                     onChange={(e) => setPhone(e.target.value)}
                                     placeholder="10 digit number"
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-black focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                     required
                                 />
                             </div>
@@ -111,7 +111,7 @@ export default function AuthView({ onLoginSuccess }) {
                                     value={pin}
                                     onChange={(e) => setPin(e.target.value)}
                                     placeholder="Your secret PIN"
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-black focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                     required
                                 />
                             </div>
