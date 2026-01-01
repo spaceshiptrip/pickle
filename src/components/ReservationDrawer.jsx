@@ -397,10 +397,12 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                             <div className="font-medium mb-2">Roster</div>
                             <div className="overflow-x-auto">
 
+																{/*
 																// <div className="text-xs text-gray-500 mb-2">
 																	// Debug roster: {roster.length} —
 																	// {roster.map(r => r.Player).join(', ')}
 																// </div>
+																*/}
 
                                 <table className="w-full text-sm border">
                                     <thead>
