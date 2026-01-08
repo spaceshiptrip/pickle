@@ -8,14 +8,36 @@ import { authApi } from './api';
 import logo from './assets/AthPicklersLogo.png';
 import spaceshiplogo from './assets/SpaceshipTripLogo.png';
 
+const THEME_KEY = 'pickle_theme'; // 'light' | 'dark'
+
+function getInitialTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  if (saved === 'dark' || saved === 'light') return saved;
+  return 'light'; // default to light while you build preference UX
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [editingReservation, setEditingReservation] = useState(null);
 
+  // ✅ Theme
+  const [theme, setTheme] = useState(getInitialTheme);
+
+  useEffect(() => {
+    // Apply theme to <html> so Tailwind dark: works across the app
+    const root = document.documentElement; // <html>
+    if (theme === 'dark') root.classList.add('dark');
+    else root.classList.remove('dark');
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+
   useEffect(() => {
     initAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function initAuth() {
@@ -60,65 +82,100 @@ export default function App() {
     const sessionId = localStorage.getItem('pickle_session_id');
     try {
       if (sessionId) await authApi.logout(sessionId);
-    } catch (e) { }
+    } catch (e) {}
     localStorage.removeItem('pickle_session_id');
     setUser(null);
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
       </div>
     );
   }
 
   if (!user) {
-    return <AuthView onLoginSuccess={onLoginSuccess} />;
+    return (
+      <AuthView
+        onLoginSuccess={onLoginSuccess}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
+    );
   }
 
   return (
     // min-h-screen + flex column lets us “stick” a footer bar to bottom when content is short
-    <div className="min-h-screen flex flex-col bg-slate-50 text-gray-900">
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-900 text-gray-900 dark:text-slate-100">
       {/* Page content */}
       <div className="w-full max-w-5xl mx-auto p-4 font-sans flex-1">
-				{/* --- START OF HEADER SECTION --- */}
-				<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #e5e7eb', paddingBottom: '1.5rem', width: '100%' }}>
-					<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
-						<img
-							src={logo}
-							alt="Athenaeum Picklers Logo"
-							style={{ height: '100px', width: '100px', objectFit: 'contain' }} 
-						/>
-						<div style={{ textAlign: 'center' }}>
-							<h1 className="text-xl sm:text-3xl font-black text-blue-900 uppercase tracking-tighter leading-none">
-								Pickleball Schedule
-							</h1>
-							<p style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.25rem' }}>
-								Welcome back, <span style={{ fontWeight: 'bold', color: '#4f46e5' }}>{user.name}</span>
-							</p>
-						</div>
-					</div>
+            
+            {/* --- START OF HEADER SECTION --- */}
+            <div className="flex flex-col items-center justify-center mb-6 pb-6 w-full border-b border-slate-200 dark:border-slate-700">
 
-					<div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
-						<div
-							className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
-								user.role?.toLowerCase() === 'admin' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-							}`}
-						>
-							{user.role}
-						</div>
-						<button
-							onClick={onLogout}
-							style={{ width: 'auto', background: 'transparent', color: '#9ca3af', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', padding: '0' }}
-						>
-							Logout
-						</button>
-					</div>
-				</div>
-				{/* --- END OF HEADER SECTION --- */}
+              <div className="flex flex-col items-center gap-3">
+                <img
+                  src={logo}
+                  alt="Athenaeum Picklers Logo"
+                  className="h-[100px] w-[100px] object-contain"
+                />
 
-        <div className="bg-white rounded-xl shadow-lg p-1">
+                <div className="text-center">
+                  <h1 className="text-xl sm:text-3xl font-black uppercase tracking-tighter leading-none
+                                 text-blue-900 dark:text-blue-200">
+                    Pickleball Schedule
+                  </h1>
+
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                    Welcome back,{' '}
+                    <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                      {user.name}
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 mt-4">
+                <div
+                  className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest
+                    ${
+                      user.role?.toLowerCase() === 'admin'
+                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'
+                        : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
+                    }`}
+                >
+                  {user.role}
+                </div>
+
+                {/* Theme toggle */}
+                <button
+                  type="button"
+                  onClick={toggleTheme}
+                  className="text-[10px] font-black uppercase tracking-widest
+                             text-slate-500 hover:text-slate-800
+                             dark:text-slate-400 dark:hover:text-slate-200
+                             transition"
+                >
+                  {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+                </button>
+
+                <button
+                  onClick={onLogout}
+                  className="text-[10px] font-black uppercase tracking-widest
+                             text-slate-400 hover:text-slate-700
+                             dark:text-slate-500 dark:hover:text-slate-300
+                             transition"
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+            {/* --- END OF HEADER SECTION --- */}
+
+
+
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-1">
           <CalendarView onSelectReservation={setSelected} />
         </div>
 
@@ -144,29 +201,43 @@ export default function App() {
       </div>
 
       {/* Footer bar (black strip across full width) */}
-			<footer style={{ width: '100%', backgroundColor: '#000', marginTop: 'auto', padding: '1.5rem 0' }}>
-				<div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-					<div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-						<img
-							src={spaceshiplogo}
-							alt="SpaceshipTrip Logo"
-							style={{ height: '40px', width: '40px', objectFit: 'contain' }}
-						/>
-						<div style={{ textAlign: 'center' }}>
-							<span style={{ color: '#fff', fontSize: '0.75rem', fontWeight: 'bold', display: 'block' }}>Too Complex Pickle Check-in App</span>
-							<span style={{ color: '#9ca3af', fontSize: '0.7rem' }}>Open Source</span>
-						</div>
-					</div>
-					<div style={{ display: 'flex', gap: '1rem', fontSize: '0.7rem' }}>
-						 <a href="https://github.com/spaceshiptrip/pickle" style={{ color: '#9ca3af' }}>Repo</a>
-						 <a href="https://nadabarkada.com" style={{ color: '#9ca3af' }}>Athenaeum Picklers</a>
-					</div>
-				</div>
-			</footer>
+      <footer style={{ width: '100%', backgroundColor: '#000', marginTop: 'auto', padding: '1.5rem 0' }}>
+        <div
+          style={{
+            maxWidth: '1200px',
+            margin: '0 auto',
+            padding: '0 1rem',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '1rem',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <img
+              src={spaceshiplogo}
+              alt="SpaceshipTrip Logo"
+              style={{ height: '40px', width: '40px', objectFit: 'contain' }}
+            />
+            <div style={{ textAlign: 'center' }}>
+              <span style={{ color: '#fff', fontSize: '0.75rem', fontWeight: 'bold', display: 'block' }}>
+                Too Complex Pickle Check-in App
+              </span>
+              <span style={{ color: '#9ca3af', fontSize: '0.7rem' }}>Open Source</span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '1rem', fontSize: '0.7rem' }}>
+            <a href="https://github.com/spaceshiptrip/pickle" style={{ color: '#9ca3af' }}>
+              Repo
+            </a>
+            <a href="https://nadabarkada.com" style={{ color: '#9ca3af' }}>
+              Athenaeum Picklers
+            </a>
+          </div>
+        </div>
+      </footer>
       {/* End Footer bar (black strip across full width) */}
-
-
-
     </div>
   );
 }
+
