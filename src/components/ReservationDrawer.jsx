@@ -1,8 +1,17 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { VENMO_URL } from '../config';
 import { apiGet, apiPost } from '../api';
 
 const EXTRA_NAME_OPTIONS = ['TBD', 'Other'];
+
+function Spinner({ className = "h-4 w-4" }) {
+  return (
+    <span
+      className={`inline-block animate-spin rounded-full border-2 border-current border-t-transparent ${className}`}
+      aria-hidden="true"
+    />
+  );
+}
 
 export default function ReservationDrawer({ reservation, onClose, role, onEditReservation }) {
   const [players, setPlayers] = useState(['']);
@@ -15,6 +24,25 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
   const isAdmin = role?.toLowerCase() === 'admin';
   const isProposed = reservation.Status === 'proposed';
+
+
+  const [submitting, setSubmitting] = useState(false);
+  const [updatingPaidFor, setUpdatingPaidFor] = useState(null); // player name or null
+  const [toast, setToast] = useState(null); // { type: 'success'|'error', text: string }
+
+
+  const toastTimerRef = useRef(null);
+
+
+  const handleClose = useCallback(() => {
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+    setToast(null);
+    onClose?.();
+  }, [onClose]);
+
 
   // Lock page scroll while modal is open
   useEffect(() => {
@@ -34,12 +62,13 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
   // ESC to close
   useEffect(() => {
     const onKeyDown = (e) => {
-      if (e.key === 'Escape') onClose?.();
+      if (e.key === 'Escape') handleClose();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+  }, [handleClose]);
 
+  // totalFees calc
   const totalFees = useMemo(() => {
     const fees = (reservation.Fees || []).reduce((a, f) => a + (Number(f.Amount) || 0), 0);
     return (Number(reservation.BaseFee) || 0) + fees;
@@ -62,6 +91,16 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
       cancelled = true;
     };
   }, [reservation?.Id]);
+
+  // for toast timer
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Load user list for admin dropdown
   useEffect(() => {
@@ -119,7 +158,27 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
     setPlayerOthers(nextOthers);
   }
 
+  function showToast(type, text, ms = 2000) {
+    setToast({ type, text });
+
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimerRef.current = null;
+    }, ms);
+  }
+
+
+
+
   async function submit() {
+    if (submitting) return; // ✅ prevent double-submits
+    setSubmitting(true);
+
     const names = isAdmin
       ? players
           .map((p, i) => {
@@ -130,12 +189,18 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
           })
           .filter(Boolean)
       : [];
-
-    if (isAdmin && names.length === 0) return;
-
+  
+    if (isAdmin && names.length === 0) {
+      setSubmitting(false);
+      return;
+    }
+  
     if (isAdmin) {
       const hasOtherMissing = players.some((p, i) => p === 'Other' && !(playerOthers[i] || '').trim());
-      if (hasOtherMissing) return alert('Please fill in the name for any "Other" player.');
+      if (hasOtherMissing) {
+        setSubmitting(false);
+        return alert('Please fill in the name for any "Other" player.');
+      }
     }
 
     try {
@@ -145,25 +210,41 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
         markPaid,
         totalAmount: total ? Number(total) : totalFees,
       });
-
+  
       if (res.ok) {
         const r = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
         if (r.ok) setRoster(r.attendees);
         setPlayers(['']);
         setPlayerOthers(['']);
+        showToast('success', 'Saved!');
+      } else {
+        showToast('error', res.error || 'Failed to sign up');
       }
     } catch (e) {
-      alert('Failed to sign up: ' + e.message);
+      showToast('error', 'Failed to sign up: ' + e.message);
+    } finally {
+      setSubmitting(false);
     }
   }
 
   async function setPaid(name, paid) {
+    if (updatingPaidFor) return; // ✅ prevent multiple payment updates at once
+    setUpdatingPaidFor(name);
+  
     try {
-      await apiPost('markpaid', { reservationId: reservation.Id, player: name, paid });
-      const r = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
-      if (r.ok) setRoster(r.attendees);
+      const r1 = await apiPost('markpaid', { reservationId: reservation.Id, player: name, paid });
+      if (!r1.ok) {
+        showToast('error', r1.error || 'Failed to update');
+        return;
+      }
+
+      const r2 = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
+      if (r2.ok) setRoster(r2.attendees);
+      showToast('success', paid ? 'Marked paid' : 'Marked unpaid');
     } catch (e) {
-      alert('Failed to update payment status: ' + e.message);
+      showToast('error', 'Failed to update payment status: ' + e.message);
+    } finally {
+      setUpdatingPaidFor(null);
     }
   }
 
@@ -197,10 +278,10 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
       role="dialog"
       aria-modal="true"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose?.();
+        if (e.target === e.currentTarget) handleClose();
       }}
       onTouchStart={(e) => {
-        if (e.target === e.currentTarget) onClose?.();
+        if (e.target === e.currentTarget) handleClose();
       }}
     >
       <div className="min-h-full flex items-center justify-center p-2 sm:p-6 py-8">
@@ -240,7 +321,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                 )}
 
                 <button
-                  onClick={onClose}
+                  onClick={handleClose}
                   className="flex items-center gap-2 text-sm font-bold px-3 py-1 bg-black text-white rounded hover:bg-gray-900 transition-colors"
                   type="button"
                 >
@@ -250,6 +331,23 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
               </div>
             </div>
           </div>
+
+
+          {/* Toast */}
+          {toast && (
+            <div
+              className={`mx-4 mt-4 rounded-lg px-3 py-2 text-sm font-semibold
+                ${toast.type === 'success'
+                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:border-emerald-500/30'
+                  : 'bg-rose-50 text-rose-800 border border-rose-200 dark:bg-rose-500/15 dark:text-rose-200 dark:border-rose-500/30'
+                }`}
+              role="status"
+              aria-live="polite"
+            >
+              {toast.text}
+            </div>
+          )}
+
 
           {/* Content */}
           <div className="px-4 py-4 pb-24 text-slate-900 dark:text-slate-100">
@@ -326,19 +424,25 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                       <div className="flex gap-2">
                         {i === players.length - 1 ? (
                           <button
-                            className="border rounded px-3 py-1 bg-white hover:bg-slate-50 text-slate-900 border-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100 dark:border-slate-700"
+                            className={`border rounded px-3 py-1 bg-white hover:bg-slate-50 text-slate-900 border-slate-300
+                                        dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100 dark:border-slate-700
+                                        ${submitting ? 'opacity-60 cursor-not-allowed' : ''}`}
                             onClick={() => {
                               const nextPlayers = [...players, ''];
                               setPlayers(nextPlayers);
                               ensureOtherArrayLength(nextPlayers);
                             }}
                             type="button"
+                            disabled={submitting}
                           >
                             + Add
                           </button>
+
                         ) : (
                           <button
-                            className="border rounded px-3 py-1 bg-white hover:bg-slate-50 text-red-600 border-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-red-300 dark:border-slate-700"
+                            className={`border rounded px-3 py-1 bg-white hover:bg-slate-50 text-red-600 border-slate-300
+                                        dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-red-300 dark:border-slate-700
+                                        ${submitting ? 'opacity-60 cursor-not-allowed' : ''}`}
                             onClick={() => {
                               const nextPlayers = players.filter((_, j) => j !== i);
                               const nextOthers = playerOthers.filter((_, j) => j !== i);
@@ -346,9 +450,11 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                               setPlayerOthers(nextOthers.length ? nextOthers : ['']);
                             }}
                             type="button"
+                            disabled={submitting}
                           >
                             Remove
                           </button>
+
                         )}
                       </div>
                     </div>
@@ -377,12 +483,16 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
               <div className="flex gap-2 mt-3 flex-wrap">
                 <button
-                  className="bg-blue-600 text-white rounded px-4 py-2 font-semibold hover:bg-blue-700 transition-colors"
+                  className={`bg-blue-600 text-white rounded px-4 py-2 font-semibold inline-flex items-center gap-2
+                              ${submitting ? 'opacity-60 cursor-not-allowed' : 'hover:bg-blue-700'}`}
                   onClick={submit}
                   type="button"
+                  disabled={submitting}
                 >
-                  {isProposed ? 'Sign up for proposal' : 'Submit sign-up'}
+                  {submitting && <Spinner />}
+                  {submitting ? 'Submitting…' : (isProposed ? 'Sign up for proposal' : 'Submit sign-up')}
                 </button>
+
 
                 {!isProposed && (
                   <a
@@ -439,22 +549,32 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
                         {isAdmin && (
                           <td className="p-2 border border-slate-200 dark:border-slate-700">
-                            <button
-                              className="border rounded px-2 py-0.5 mr-1 bg-white hover:bg-slate-50 text-slate-900 border-slate-300
-                                         dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100 dark:border-slate-700"
-                              onClick={() => setPaid(r.Player, true)}
-                              type="button"
-                            >
-                              Mark paid
-                            </button>
-                            <button
-                              className="border rounded px-2 py-0.5 bg-white hover:bg-slate-50 text-slate-900 border-slate-300
-                                         dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100 dark:border-slate-700"
-                              onClick={() => setPaid(r.Player, false)}
-                              type="button"
-                            >
-                              Unpay
-                            </button>
+                            <div className="flex items-center gap-2">
+                              {updatingPaidFor === r.Player && (
+                                <span className="text-xs text-slate-500 dark:text-slate-400">Updating…</span>
+                              )}
+                              <button
+                                className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
+                                            dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
+                                            ${updatingPaidFor ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                onClick={() => setPaid(r.Player, true)}
+                                type="button"
+                                disabled={!!updatingPaidFor}
+                              >
+                                Mark paid
+                              </button>
+                          
+                              <button
+                                className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
+                                            dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
+                                            ${updatingPaidFor ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                onClick={() => setPaid(r.Player, false)}
+                                type="button"
+                                disabled={!!updatingPaidFor}
+                              >
+                                Unpay
+                              </button>
+                            </div>
                           </td>
                         )}
                       </tr>
@@ -482,7 +602,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
       {/* Mobile fail-safe close button */}
       <button
-        onClick={onClose}
+        onClick={handleClose}
         className="fixed bottom-4 right-4 z-[60] bg-black text-white px-4 py-3 rounded-full font-bold shadow-lg hover:bg-gray-900 sm:hidden"
         type="button"
         aria-label="Close dialog"
