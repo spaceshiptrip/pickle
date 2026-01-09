@@ -615,7 +615,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
 					  {!rosterLoading && roster.map((r) => (
 						<tr
-						  key={`${r.ReservationId}-${r.Player}`}
+					    key={r._sheetRow}
 						  className="hover:bg-slate-50 dark:hover:bg-slate-800/60"
 						>
 						  <td className="p-2 border border-slate-200 dark:border-slate-700">{r.Player}</td>

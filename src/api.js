@@ -21,6 +21,11 @@ export async function apiGet(params) {
   return data;
 }
 
+export const attendanceApi = {
+  unrsvp: (sheetRow, reservationId) =>
+    apiPost('unrsvp', { sheetRow, reservationId }),
+};
+
 
 export async function apiPost(action, body) {
   const sessionId = getSessionId();
