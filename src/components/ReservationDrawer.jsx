@@ -33,6 +33,8 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
   const toastTimerRef = useRef(null);
 
+  const [rosterLoading, setRosterLoading] = useState(true); // start true so opening shows spinner immediately
+
 
   const handleClose = useCallback(() => {
     if (toastTimerRef.current) {
@@ -80,13 +82,16 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
     (async () => {
       try {
+        setRosterLoading(true);
         const data = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
         if (!cancelled && data.ok) setRoster(data.attendees || []);
       } catch (e) {
         if (!cancelled) console.error('Failed to load attendance', e);
+      } finally {
+        if (!cancelled) setRosterLoading(false);
       }
     })();
-
+  
     return () => {
       cancelled = true;
     };
@@ -148,7 +153,8 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
     return Math.round((amt / count) * 100) / 100;
   }, [total, totalFees, players, playerOthers, isAdmin]);
 
-  const used = roster.length;
+  const used = rosterLoading ? '…' : roster.length;
+
   const cap = reservation.Capacity || 0;
 
   function ensureOtherArrayLength(nextPlayers) {
@@ -212,8 +218,13 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
       });
   
       if (res.ok) {
-        const r = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
-        if (r.ok) setRoster(r.attendees);
+        try {
+          setRosterLoading(true);
+          const r = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
+          if (r.ok) setRoster(r.attendees);
+        } finally {
+          setRosterLoading(false);
+        }
         setPlayers(['']);
         setPlayerOthers(['']);
         showToast('success', 'Saved!');
@@ -237,9 +248,13 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
         showToast('error', r1.error || 'Failed to update');
         return;
       }
-
-      const r2 = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
-      if (r2.ok) setRoster(r2.attendees);
+      try {
+        setRosterLoading(true);
+        const r2 = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
+        if (r2.ok) setRoster(r2.attendees);
+      } finally {
+        setRosterLoading(false);
+      }
       showToast('success', paid ? 'Marked paid' : 'Marked unpaid');
     } catch (e) {
       showToast('error', 'Failed to update payment status: ' + e.message);
@@ -520,77 +535,85 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                       {isAdmin && <th className="p-2 border border-slate-200 dark:border-slate-700 text-left">Actions</th>}
                     </tr>
                   </thead>
+					<tbody>
+					  {rosterLoading && (
+						<tr>
+						  <td colSpan={isAdmin ? 4 : 3} className="p-4 text-center text-slate-500 dark:text-slate-400">
+							<span className="inline-flex items-center gap-2">
+							  <Spinner className="h-4 w-4" />
+							  Loading roster…
+							</span>
+						  </td>
+						</tr>
+					  )}
 
-                  <tbody>
-                    {roster.map((r) => (
-                      <tr
-                        key={`${r.ReservationId}-${r.Player}`}
-                        className="hover:bg-slate-50 dark:hover:bg-slate-800/60"
-                      >
-                        <td className="p-2 border border-slate-200 dark:border-slate-700">{r.Player}</td>
-                        <td className="p-2 border border-slate-200 dark:border-slate-700">
-                          {r.Charge != null ? `$${r.Charge}` : '-'}
-                        </td>
-                        <td className="p-2 border border-slate-200 dark:border-slate-700">
-                          {r.PAID != null ? (
-                            <span
-                              className={`px-2 py-0.5 rounded text-xs ${
-                                r.PAID
-                                  ? 'bg-green-100 text-green-800 dark:bg-emerald-500/15 dark:text-emerald-200'
-                                  : 'bg-red-100 text-red-800 dark:bg-rose-500/15 dark:text-rose-200'
-                              }`}
-                            >
-                              {r.PAID ? 'Yes' : 'No'}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 dark:text-slate-500 italic">Private</span>
-                          )}
-                        </td>
+					  {!rosterLoading && roster.map((r) => (
+						<tr
+						  key={`${r.ReservationId}-${r.Player}`}
+						  className="hover:bg-slate-50 dark:hover:bg-slate-800/60"
+						>
+						  <td className="p-2 border border-slate-200 dark:border-slate-700">{r.Player}</td>
+						  <td className="p-2 border border-slate-200 dark:border-slate-700">
+							{r.Charge != null ? `$${r.Charge}` : '-'}
+						  </td>
+						  <td className="p-2 border border-slate-200 dark:border-slate-700">
+							{r.PAID != null ? (
+							  <span
+								className={`px-2 py-0.5 rounded text-xs ${
+								  r.PAID
+									? 'bg-green-100 text-green-800 dark:bg-emerald-500/15 dark:text-emerald-200'
+									: 'bg-red-100 text-red-800 dark:bg-rose-500/15 dark:text-rose-200'
+								}`}
+							  >
+								{r.PAID ? 'Yes' : 'No'}
+							  </span>
+							) : (
+							  <span className="text-slate-400 dark:text-slate-500 italic">Private</span>
+							)}
+						  </td>
 
-                        {isAdmin && (
-                          <td className="p-2 border border-slate-200 dark:border-slate-700">
-                            <div className="flex items-center gap-2">
-                              {updatingPaidFor === r.Player && (
-                                <span className="text-xs text-slate-500 dark:text-slate-400">Updating…</span>
-                              )}
-                              <button
-                                className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
-                                            dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
-                                            ${updatingPaidFor ? 'opacity-60 cursor-not-allowed' : ''}`}
-                                onClick={() => setPaid(r.Player, true)}
-                                type="button"
-                                disabled={!!updatingPaidFor}
-                              >
-                                Mark paid
-                              </button>
-                          
-                              <button
-                                className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
-                                            dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
-                                            ${updatingPaidFor ? 'opacity-60 cursor-not-allowed' : ''}`}
-                                onClick={() => setPaid(r.Player, false)}
-                                type="button"
-                                disabled={!!updatingPaidFor}
-                              >
-                                Unpay
-                              </button>
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
+						  {isAdmin && (
+							<td className="p-2 border border-slate-200 dark:border-slate-700">
+							  <div className="flex items-center gap-2">
+								{updatingPaidFor === r.Player && (
+								  <span className="text-xs text-slate-500 dark:text-slate-400">Updating…</span>
+								)}
+								<button
+								  className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
+											  dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
+											  ${updatingPaidFor ? 'opacity-60 cursor-not-allowed' : ''}`}
+								  onClick={() => setPaid(r.Player, true)}
+								  type="button"
+								  disabled={!!updatingPaidFor}
+								>
+								  Mark paid
+								</button>
 
-                    {roster.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={isAdmin ? 4 : 3}
-                          className="p-4 text-center text-slate-500 dark:text-slate-400"
-                        >
-                          No sign-ups yet
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
+								<button
+								  className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
+											  dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
+											  ${updatingPaidFor ? 'opacity-60 cursor-not-allowed' : ''}`}
+								  onClick={() => setPaid(r.Player, false)}
+								  type="button"
+								  disabled={!!updatingPaidFor}
+								>
+								  Unpay
+								</button>
+							  </div>
+							</td>
+						  )}
+						</tr>
+					  ))}
+
+					  {!rosterLoading && roster.length === 0 && (
+						<tr>
+						  <td colSpan={isAdmin ? 4 : 3} className="p-4 text-center text-slate-500 dark:text-slate-400">
+							No sign-ups yet
+						  </td>
+						</tr>
+					  )}
+					</tbody>
+
                 </table>
               </div>
             </div>
