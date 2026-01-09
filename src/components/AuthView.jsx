@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { authApi } from '../api';
 import logo from '../assets/AthPicklersLogo.png';
 
@@ -11,6 +11,16 @@ export default function AuthView({ onLoginSuccess, theme = 'light', onToggleThem
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+
+  const [buildInfo, setBuildInfo] = useState(null);
+
+  useEffect(() => {
+    fetch('/version.json')
+	    .then((r) => r.json())
+		    .then(setBuildInfo)
+			    .catch(() => {});
+				}, []);
+
 
   const handleMemberLogin = async (e) => {
     e.preventDefault();
@@ -204,6 +214,13 @@ export default function AuthView({ onLoginSuccess, theme = 'light', onToggleThem
         {error && (
           <div className="mt-6 p-4 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/50 text-rose-800 dark:text-rose-300 text-sm rounded-xl text-center">
             {error}
+          </div>
+        )}
+
+        {/* Build info (subtle) */}
+        {buildInfo && (
+          <div className="mt-6 text-center text-[10px] text-slate-400 dark:text-slate-500">
+            v{buildInfo.version} · build {buildInfo.build}
           </div>
         )}
       </div>
