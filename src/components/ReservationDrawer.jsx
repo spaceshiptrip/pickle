@@ -36,8 +36,7 @@ function formatTimeAmPm(timeStr) {
   });
 }
 
-
-export default function ReservationDrawer({ reservation, onClose, role, onEditReservation }) {
+export default function ReservationDrawer({ reservation, onClose, role, user, onEditReservation }) {
   const [players, setPlayers] = useState(['']);
   const [playerOthers, setPlayerOthers] = useState(['']);
   const [userNames, setUserNames] = useState([]);
@@ -100,8 +99,41 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
     return true;
   }
 
+  const myName = (user?.Name || user?.name || '').trim();
 
+  const isSignedUp = useMemo(() => {
+    if (!myName) return false;
+    const me = myName.toLowerCase();
+    return (roster || []).some(r => String(r.Player || '').trim().toLowerCase() === me);
+  }, [roster, myName]);
 
+ async function cancelRsvp(sheetRow) {
+  if (uiLocked) return;
+  if (!confirmTextWarning()) return;
+
+  const ok = window.confirm('Cancel this RSVP?');
+  if (!ok) return;
+
+  setBusy(true);
+  try {
+    const res = await apiPost('cancelrsvp', {
+      reservationId: reservation.Id,
+      sheetRow, // ✅ cancels ONE specific row
+    });
+
+    if (!res?.ok) {
+      showToast('error', res?.error || 'Failed to cancel RSVP');
+      return;
+    }
+
+    await refreshRoster();
+    showToast('success', 'RSVP cancelled');
+  } catch (e) {
+    showToast('error', 'Failed to cancel RSVP: ' + e.message);
+  } finally {
+    setBusy(false);
+  }
+}
 
   const [updatingPaidFor, setUpdatingPaidFor] = useState(null); // player name or null
   const [toast, setToast] = useState(null); // { type: 'success'|'error', text: string }
@@ -664,13 +696,20 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                       <th className="p-2 border border-slate-200 dark:border-slate-700 text-left">Player</th>
                       <th className="p-2 border border-slate-200 dark:border-slate-700 text-left">Charge</th>
                       <th className="p-2 border border-slate-200 dark:border-slate-700 text-left">Paid</th>
-                      {isAdmin && <th className="p-2 border border-slate-200 dark:border-slate-700 text-left">Actions</th>}
+
+                      {!isAdmin && (
+                        <th className="p-2 border ... text-left w-[1%] whitespace-nowrap"></th>
+                      )}
+                    
+                      {isAdmin && (
+                        <th className="p-2 border border-slate-200 dark:border-slate-700 text-left">Actions</th>
+                      )}
                     </tr>
                   </thead>
 					<tbody>
 					  {rosterLoading && (
 						<tr>
-						  <td colSpan={isAdmin ? 4 : 3} className="p-4 text-center text-slate-500 dark:text-slate-400">
+						  <td colSpan={isAdmin ? 4 : 4} className="p-4 text-center text-slate-500 dark:text-slate-400">
 							<span className="inline-flex items-center gap-2">
 							  <Spinner className="h-4 w-4" />
 							  Loading roster…
@@ -679,67 +718,99 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 						</tr>
 					  )}
 
-					  {!rosterLoading && roster.map((r) => (
-						<tr
-					    key={r._sheetRow}
-						  className="hover:bg-slate-50 dark:hover:bg-slate-800/60"
-						>
-						  <td className="p-2 border border-slate-200 dark:border-slate-700">{r.Player}</td>
-						  <td className="p-2 border border-slate-200 dark:border-slate-700">
-							{r.Charge != null ? `$${r.Charge}` : '-'}
-						  </td>
-						  <td className="p-2 border border-slate-200 dark:border-slate-700">
-							{r.PAID != null ? (
-							  <span
-								className={`px-2 py-0.5 rounded text-xs ${
-								  r.PAID
-									? 'bg-green-100 text-green-800 dark:bg-emerald-500/15 dark:text-emerald-200'
-									: 'bg-red-100 text-red-800 dark:bg-rose-500/15 dark:text-rose-200'
-								}`}
-							  >
-								{r.PAID ? 'Yes' : 'No'}
-							  </span>
-							) : (
-							  <span className="text-slate-400 dark:text-slate-500 italic">Private</span>
-							)}
-						  </td>
 
-						  {isAdmin && (
-							<td className="p-2 border border-slate-200 dark:border-slate-700">
-							  <div className="flex items-center gap-2">
-								{updatingPaidFor === r.Player && (
-								  <span className="text-xs text-slate-500 dark:text-slate-400">Updating…</span>
-								)}
-								<button
-								  className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
-											  dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
-											  ${busy ? 'opacity-60 cursor-not-allowed' : ''}`}
-								  onClick={() => setPaid(r.Player, true)}
-								  type="button"
-								  disabled={uiLocked}
-								>
-								  Mark paid
-								</button>
+{!rosterLoading && roster.map((r) => {
+  const isMine =
+    !isAdmin &&
+    myName &&
+    String(r.Player || '').trim().toLowerCase() === myName.toLowerCase();
 
-								<button
-								  className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
-											  dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
-											  ${busy ? 'opacity-60 cursor-not-allowed' : ''}`}
-								  onClick={() => setPaid(r.Player, false)}
-								  type="button"
-								  disabled={uiLocked}
-								>
-								  Unpay
-								</button>
-							  </div>
-							</td>
-						  )}
-						</tr>
-					  ))}
+  return (
+    <tr
+      key={r._sheetRow}
+      className="hover:bg-slate-50 dark:hover:bg-slate-800/60"
+    >
+      <td className="p-2 border border-slate-200 dark:border-slate-700">
+        {r.Player}
+      </td>
+
+      <td className="p-2 border border-slate-200 dark:border-slate-700">
+        {r.Charge != null ? `$${r.Charge}` : '-'}
+      </td>
+
+      <td className="p-2 border border-slate-200 dark:border-slate-700">
+        {r.PAID != null ? (
+          <span
+            className={`px-2 py-0.5 rounded text-xs ${
+              r.PAID
+                ? 'bg-green-100 text-green-800 dark:bg-emerald-500/15 dark:text-emerald-200'
+                : 'bg-red-100 text-red-800 dark:bg-rose-500/15 dark:text-rose-200'
+            }`}
+          >
+            {r.PAID ? 'Yes' : 'No'}
+          </span>
+        ) : (
+          <span className="text-slate-400 dark:text-slate-500 italic">Private</span>
+        )}
+      </td>
+
+      {/* ✅ NON-ADMIN CANCEL BUTTON (only shows on YOUR rows) */}
+      {!isAdmin && (
+        <td className="p-2 border border-slate-200 dark:border-slate-700">
+          {isMine ? (
+            <button
+              type="button"
+              disabled={uiLocked}
+              onClick={() => r._sheetRow && cancelRsvp(r._sheetRow)}
+              className={`rounded px-3 py-1 text-xs font-semibold border
+                border-rose-300 text-rose-700 bg-white hover:bg-rose-50
+                dark:bg-slate-900 dark:border-rose-500/40 dark:text-rose-200 dark:hover:bg-rose-500/10
+                ${uiLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
+            >
+              Cancel
+            </button>
+          ) : null}
+        </td>
+      )}
+
+      {isAdmin && (
+        <td className="p-2 border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-2">
+            {updatingPaidFor === r.Player && (
+              <span className="text-xs text-slate-500 dark:text-slate-400">Updating…</span>
+            )}
+            <button
+              className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
+                          dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
+                          ${busy ? 'opacity-60 cursor-not-allowed' : ''}`}
+              onClick={() => setPaid(r.Player, true)}
+              type="button"
+              disabled={uiLocked}
+            >
+              Mark paid
+            </button>
+
+            <button
+              className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
+                          dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
+                          ${busy ? 'opacity-60 cursor-not-allowed' : ''}`}
+              onClick={() => setPaid(r.Player, false)}
+              type="button"
+              disabled={uiLocked}
+            >
+              Unpay
+            </button>
+          </div>
+        </td>
+      )}
+    </tr>
+  );
+})}
+
 
 					  {!rosterLoading && roster.length === 0 && (
 						<tr>
-						  <td colSpan={isAdmin ? 4 : 3} className="p-4 text-center text-slate-500 dark:text-slate-400">
+						  <td colSpan={isAdmin ? 4 : 4} className="p-4 text-center text-slate-500 dark:text-slate-400">
 							No sign-ups yet
 						  </td>
 						</tr>

@@ -2,7 +2,8 @@
 // TODO: Update these values for your deployment.
 
 // Google Apps Script "web app" URL that writes to your Google Sheet.
-export const APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyEjEPr4zW0yZdUqQ-B1xDLWjtfVFe4K2KdoFeDnLsfHM2KwQYP5_sMrMzVpdZB6YdY/exec';
+export const APP_SCRIPT_URL =
+  'https://script.google.com/macros/s/AKfycbzynLglhzqWx7Eil8xH1f-giNrkMppwFwuyL3Li2iKovVqw11qMybr-fC16B5VNAg7Q/exec';
 
 // Venmo handle (e.g., '@John-Doe').
 export const VENMO_HANDLE = '@Jay-Torres-367';

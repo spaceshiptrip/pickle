@@ -206,6 +206,7 @@ export default function App() {
             reservation={selected}
             onClose={() => setSelected(null)}
             role={user.role}
+						user={user}
             onEditReservation={(res) => {
               setEditingReservation(res);
               setSelected(null); // Close the drawer

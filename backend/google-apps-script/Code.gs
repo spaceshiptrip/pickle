@@ -85,6 +85,12 @@ function doPost(e) {
     return json_(unrsvp_(payload, ctxUnrsvp));
   }
 
+  if (action === 'cancelrsvp') {
+    var ctxCancel = requireAuth_(e, payload);
+    requireRole_(ctxCancel, ['admin', 'memberplus', 'member', 'guest']);
+    return json_(unrsvp_(payload, ctxCancel));
+  }
+
   if (action === 'markpaid') {
     var ctx = requireAuth_(e, payload);
     requireRole_(ctx, ['admin']);
@@ -145,7 +151,7 @@ function requireAuth_(e, payload) {
   var user = findUserById_(sess.UserId);
   if (!user || !user.Active) throw new Error('invalid_user');
 
-  return { sessionId: sid, user: user, role: user.Role, userId: user.UserId };
+  return { sessionId: sid, user: user, role: user.Role, userId: String(user.UserId) };
 }
 
 function requireRole_(ctx, allowed) {
@@ -333,8 +339,9 @@ function listReservations(userRole) {
 }
 
 function listAttendance_(e, ctx) {
-  var resId = e.parameter.reservationId;
-  var month = e.parameter.month; // YYYY-MM (optional)
+
+  var resId = (e && e.parameter && e.parameter.reservationId) ? String(e.parameter.reservationId) : '';
+  var month = (e && e.parameter && e.parameter.month) ? String(e.parameter.month) : '';
 
   var atSheet = sheetByName(ATTENDANCE_SHEET_NAME);
   var at = readTable_(atSheet);
@@ -350,6 +357,7 @@ function listAttendance_(e, ctx) {
   for (var i = 0; i < at.rows.length; i++) {
     var r = at.rows[i];
 
+
     // Filter: reservationId OR month OR all
     if (resId) {
       if (String(r[idx['ReservationId']]) !== String(resId)) continue;
@@ -359,6 +367,13 @@ function listAttendance_(e, ctx) {
         ? Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM')
         : String(d).substring(0, 7);
       if (ds !== month) continue;
+    }
+
+
+    // Skip cancelled rows (robust: handles 0, "0", false, "")
+    if (idx['Present (1/0)'] !== undefined) {
+      var presentRaw = r[idx['Present (1/0)']];
+      if (Number(presentRaw) === 0) continue;
     }
 
     var rowUserId = '';
@@ -457,6 +472,9 @@ function signup_(payload, ctx) {
 }
 
 function unrsvp_(payload, ctx) {
+
+  if (!payload.reservationId) return { ok: false, error: 'missing_reservation_id' };
+
   var sheetRow = Number(payload.sheetRow || 0);
   if (!sheetRow || sheetRow < 2) return { ok: false, error: 'bad_request' };
 
