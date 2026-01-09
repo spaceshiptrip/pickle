@@ -13,7 +13,9 @@ const THEME_KEY = 'pickle_theme'; // 'light' | 'dark'
 function getInitialTheme() {
   const saved = localStorage.getItem(THEME_KEY);
   if (saved === 'dark' || saved === 'light') return saved;
-  return 'light'; // default to light while you build preference UX
+
+  const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)')?.matches;
+  return prefersDark ? 'dark' : 'light';
 }
 
 export default function App() {
@@ -22,18 +24,38 @@ export default function App() {
   const [selected, setSelected] = useState(null);
   const [editingReservation, setEditingReservation] = useState(null);
 
-  // ✅ Theme
+  // Theme
   const [theme, setTheme] = useState(getInitialTheme);
 
-  useEffect(() => {
-    // Apply theme to <html> so Tailwind dark: works across the app
-    const root = document.documentElement; // <html>
-    if (theme === 'dark') root.classList.add('dark');
-    else root.classList.remove('dark');
-    localStorage.setItem(THEME_KEY, theme);
-  }, [theme]);
+  // Track whether the user explicitly chose
+  const [hasExplicitTheme, setHasExplicitTheme] = useState(
+    () => localStorage.getItem(THEME_KEY) === 'dark' || localStorage.getItem(THEME_KEY) === 'light'
+  );
 
-  const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    if (hasExplicitTheme) localStorage.setItem(THEME_KEY, theme);
+  }, [theme, hasExplicitTheme]);
+
+  useEffect(() => {
+    if (hasExplicitTheme) return;
+  
+    const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
+    if (!mq) return;
+  
+    const handler = (e) => setTheme(e.matches ? 'dark' : 'light');
+    mq.addEventListener?.('change', handler);
+    return () => mq.removeEventListener?.('change', handler);
+  }, [hasExplicitTheme]);
+
+  const toggleTheme = () => {
+    setHasExplicitTheme(true);
+    setTheme((t) => {
+      const next = t === 'dark' ? 'light' : 'dark';
+      localStorage.setItem(THEME_KEY, next); // optional immediate persist
+      return next;
+    });
+  };
 
   useEffect(() => {
     initAuth();

@@ -13,6 +13,29 @@ function Spinner({ className = "h-4 w-4" }) {
   );
 }
 
+function formatDateMmmDdYyyy(dateStr) {
+  // dateStr = "YYYY-MM-DD"
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString(undefined, {
+    month: 'short', // Jan, Feb, Mar
+    day: '2-digit',
+    year: 'numeric',
+  });
+}
+
+function formatTimeAmPm(timeStr) {
+  // timeStr = "HH:MM" (24h)
+  const [h, m] = timeStr.split(':').map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+
 export default function ReservationDrawer({ reservation, onClose, role, onEditReservation }) {
   const [players, setPlayers] = useState(['']);
   const [playerOthers, setPlayerOthers] = useState(['']);
@@ -307,20 +330,35 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
           {/* Sticky header */}
           <div className={`sticky top-0 z-30 border-b px-4 py-3 ${headerClass}`}>
-            <div className="flex justify-between items-center gap-2">
-              <h2 className="text-lg font-semibold truncate flex items-center gap-2 text-slate-900 dark:text-slate-100">
-                {isProposed ? (
-                  <span className="bg-amber-500 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-tighter">
-                    Proposed
-                  </span>
-                ) : (
-                  <span>Court {reservation.Court} — </span>
-                )}
-                <span className="text-slate-700 dark:text-slate-200">
-                  {reservation.Date} {reservation.Start}-{reservation.End}
-                </span>
-              </h2>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                {/* Line 1: Court/Proposed */}
+                <div className="flex items-center gap-2 min-w-0">
+                  {isProposed ? (
+                    <span className="shrink-0 bg-amber-500 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-tighter">
+                      Proposed
+                    </span>
+                  ) : (
+                    <span className="shrink-0 text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100">
+                      Court {reservation.Court} —
+                    </span>
+                  )}
+              
+                  {/* Keep this part from blowing up the row */}
+                  {!isProposed && (
+                    <span className="min-w-0 text-lg font-semibold text-slate-900 dark:text-slate-100 truncate">
+                      {/* optional: if you ever add a long location/name, it won't wreck the layout */}
+                    </span>
+                  )}
+                </div>
+              
+                {/* Line 2: Date/time (wraps naturally) */}
+                <div className="mt-0.5 text-sm font-semibold text-slate-700 dark:text-slate-200 break-words">
+                  {formatDateMmmDdYyyy(reservation.Date)} ·{' '}
+                  {formatTimeAmPm(reservation.Start)} – {formatTimeAmPm(reservation.End)}
+                </div>
 
+              </div>
               <div className="flex items-center gap-2 shrink-0">
                 {isAdmin && (
                   <button
@@ -544,7 +582,15 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
             </div>
 
             <div className="mt-6">
-              <div className="font-medium mb-2 text-slate-900 dark:text-slate-100">Roster</div>
+              <div className="flex items-baseline justify-between gap-2 mb-2">
+                <div className="font-medium text-slate-900 dark:text-slate-100">
+                  Roster
+                  <span className="ml-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    {formatDateMmmDdYyyy(reservation.Date)}
+                  </span>
+                </div>
+              </div>
+
               <div className="overflow-x-auto">
                 <table className="w-full text-sm border border-slate-200 dark:border-slate-700">
                   <thead>
