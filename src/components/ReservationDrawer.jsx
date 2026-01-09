@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { VENMO_URL } from '../config';
+import { VENMO_URL, JAY_PHONE_E164 } from '../config';
+import { buildSmsHref, hoursUntil } from '../utils/sms';
 import { apiGet, apiPost } from '../api';
 
 const EXTRA_NAME_OPTIONS = ['TBD', 'Other'];
@@ -48,8 +49,60 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
   const isAdmin = role?.toLowerCase() === 'admin';
   const isProposed = reservation.Status === 'proposed';
 
+  // Local event start Date (avoid "Z" so it stays local time)
+  const eventStart = useMemo(() => {
+    if (!reservation?.Date || !reservation?.Start) return null;
+    return new Date(`${reservation.Date}T${reservation.Start}:00`);
+  }, [reservation?.Date, reservation?.Start]);
 
-  const [submitting, setSubmitting] = useState(false);
+  const hoursToStart = useMemo(() => {
+    return eventStart ? hoursUntil(eventStart) : null;
+  }, [eventStart]);
+
+  const needsTextWarning = useMemo(() => {
+    // Only warn when we can compute it, and it’s within 30 hours
+    return typeof hoursToStart === 'number' && hoursToStart >= 0 && hoursToStart <= 30;
+  }, [hoursToStart]);
+
+
+
+  const smsHref = useMemo(() => {
+    const when = reservation?.Date && reservation?.Start
+      ? `${formatDateMmmDdYyyy(reservation.Date)} ${formatTimeAmPm(reservation.Start)}`
+      : 'the upcoming reservation';
+
+    const body =
+      `Hey Jay — quick question about ${when}. ` +
+      `ReservationId: ${reservation?.Id || ''}`;
+
+    return buildSmsHref(JAY_PHONE_E164, body);
+  }, [reservation?.Date, reservation?.Start, reservation?.Id]);
+
+
+  function confirmTextWarning() {
+    if (!needsTextWarning) return true;
+
+    const when = reservation?.Date && reservation?.Start
+      ? `${formatDateMmmDdYyyy(reservation.Date)} ${formatTimeAmPm(reservation.Start)}`
+      : 'this reservation';
+
+    const ok = window.confirm(
+      `⚠️ Heads up: ${when} starts in under 30 hours.\n\n` +
+      `You MUST text Jay to coordinate.\n\n` +
+      `Press OK to continue, or Cancel to go text now.`
+    );
+
+    if (!ok) {
+      // User chose Cancel → open SMS composer immediately
+      window.open(smsHref, '_self');
+      return false;
+    }
+    return true;
+  }
+
+
+
+
   const [updatingPaidFor, setUpdatingPaidFor] = useState(null); // player name or null
   const [toast, setToast] = useState(null); // { type: 'success'|'error', text: string }
 
@@ -219,6 +272,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
   async function submit() {
     if (uiLocked) return;
+    if (!confirmTextWarning()) return;
     setBusy(true);
 
     try {
@@ -377,6 +431,15 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                   </button>
                 )}
 
+                <a
+                  href={smsHref}
+                  className="flex items-center gap-2 text-sm font-bold px-3 py-1 rounded border
+                             bg-white text-slate-900 border-slate-300 hover:bg-slate-50
+                             dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-700"
+                  >
+                  <span>💬</span>
+                  <span>Text Jay</span>
+                </a>
                 <button
                   onClick={handleClose}
                   className="flex items-center gap-2 text-sm font-bold px-3 py-1 bg-black text-white rounded hover:bg-gray-900 transition-colors"
@@ -573,6 +636,9 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                       href={`${VENMO_URL}?txn=pay&amount=${perPlayer}&note=Pickleball ${reservation.Date} ${reservation.Start}`}
                       target="_blank"
                       rel="noreferrer"
+                      onClick={(e) => {
+                        if (!confirmTextWarning()) e.preventDefault();
+                      }}
                     >
                       Pay ${perPlayer} via Venmo
                     </a>
