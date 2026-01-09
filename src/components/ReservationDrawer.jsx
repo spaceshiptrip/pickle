@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { VENMO_URL } from '../config';
+import { VENMO_URL, JAY_PHONE_E164 } from '../config';
+import { buildSmsHref, hoursUntil } from '../utils/sms';
 import { apiGet, apiPost } from '../api';
 
 const EXTRA_NAME_OPTIONS = ['TBD', 'Other'];
@@ -35,8 +36,7 @@ function formatTimeAmPm(timeStr) {
   });
 }
 
-
-export default function ReservationDrawer({ reservation, onClose, role, onEditReservation }) {
+export default function ReservationDrawer({ reservation, onClose, role, user, onEditReservation }) {
   const [players, setPlayers] = useState(['']);
   const [playerOthers, setPlayerOthers] = useState(['']);
   const [userNames, setUserNames] = useState([]);
@@ -48,8 +48,93 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
   const isAdmin = role?.toLowerCase() === 'admin';
   const isProposed = reservation.Status === 'proposed';
 
+  // Local event start Date (avoid "Z" so it stays local time)
+  const eventStart = useMemo(() => {
+    if (!reservation?.Date || !reservation?.Start) return null;
+    return new Date(`${reservation.Date}T${reservation.Start}:00`);
+  }, [reservation?.Date, reservation?.Start]);
 
-  const [submitting, setSubmitting] = useState(false);
+  const hoursToStart = useMemo(() => {
+    return eventStart ? hoursUntil(eventStart) : null;
+  }, [eventStart]);
+
+  const needsTextWarning = useMemo(() => {
+    // Only warn when we can compute it, and it’s within 30 hours
+    return typeof hoursToStart === 'number' && hoursToStart >= 0 && hoursToStart <= 30;
+  }, [hoursToStart]);
+
+
+
+  const smsHref = useMemo(() => {
+    const when = reservation?.Date && reservation?.Start
+      ? `${formatDateMmmDdYyyy(reservation.Date)} ${formatTimeAmPm(reservation.Start)}`
+      : 'the upcoming reservation';
+
+    const body =
+      `Hey Jay — quick question about ${when}. ` +
+      `ReservationId: ${reservation?.Id || ''}`;
+
+    return buildSmsHref(JAY_PHONE_E164, body);
+  }, [reservation?.Date, reservation?.Start, reservation?.Id]);
+
+
+  function confirmTextWarning() {
+    if (!needsTextWarning) return true;
+
+    const when = reservation?.Date && reservation?.Start
+      ? `${formatDateMmmDdYyyy(reservation.Date)} ${formatTimeAmPm(reservation.Start)}`
+      : 'this reservation';
+
+    const ok = window.confirm(
+      `⚠️ Heads up: ${when} starts in under 30 hours.\n\n` +
+      `You MUST text Jay to coordinate.\n\n` +
+      `Press OK to continue, or Cancel to go text now.`
+    );
+
+    if (!ok) {
+      // User chose Cancel → open SMS composer immediately
+      window.open(smsHref, '_self');
+      return false;
+    }
+    return true;
+  }
+
+  const myName = (user?.Name || user?.name || '').trim();
+
+  const isSignedUp = useMemo(() => {
+    if (!myName) return false;
+    const me = myName.toLowerCase();
+    return (roster || []).some(r => String(r.Player || '').trim().toLowerCase() === me);
+  }, [roster, myName]);
+
+ async function cancelRsvp(sheetRow) {
+  if (uiLocked) return;
+  if (!confirmTextWarning()) return;
+
+  const ok = window.confirm('Cancel this RSVP?');
+  if (!ok) return;
+
+  setBusy(true);
+  try {
+    const res = await apiPost('cancelrsvp', {
+      reservationId: reservation.Id,
+      sheetRow, // ✅ cancels ONE specific row
+    });
+
+    if (!res?.ok) {
+      showToast('error', res?.error || 'Failed to cancel RSVP');
+      return;
+    }
+
+    await refreshRoster();
+    showToast('success', 'RSVP cancelled');
+  } catch (e) {
+    showToast('error', 'Failed to cancel RSVP: ' + e.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
   const [updatingPaidFor, setUpdatingPaidFor] = useState(null); // player name or null
   const [toast, setToast] = useState(null); // { type: 'success'|'error', text: string }
 
@@ -219,6 +304,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
   async function submit() {
     if (uiLocked) return;
+    if (!confirmTextWarning()) return;
     setBusy(true);
 
     try {
@@ -377,6 +463,15 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                   </button>
                 )}
 
+                <a
+                  href={smsHref}
+                  className="flex items-center gap-2 text-sm font-bold px-3 py-1 rounded border
+                             bg-white text-slate-900 border-slate-300 hover:bg-slate-50
+                             dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-700"
+                  >
+                  <span>💬</span>
+                  <span>Text Jay</span>
+                </a>
                 <button
                   onClick={handleClose}
                   className="flex items-center gap-2 text-sm font-bold px-3 py-1 bg-black text-white rounded hover:bg-gray-900 transition-colors"
@@ -573,6 +668,9 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                       href={`${VENMO_URL}?txn=pay&amount=${perPlayer}&note=Pickleball ${reservation.Date} ${reservation.Start}`}
                       target="_blank"
                       rel="noreferrer"
+                      onClick={(e) => {
+                        if (!confirmTextWarning()) e.preventDefault();
+                      }}
                     >
                       Pay ${perPlayer} via Venmo
                     </a>
@@ -598,13 +696,20 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                       <th className="p-2 border border-slate-200 dark:border-slate-700 text-left">Player</th>
                       <th className="p-2 border border-slate-200 dark:border-slate-700 text-left">Charge</th>
                       <th className="p-2 border border-slate-200 dark:border-slate-700 text-left">Paid</th>
-                      {isAdmin && <th className="p-2 border border-slate-200 dark:border-slate-700 text-left">Actions</th>}
+
+                      {!isAdmin && (
+                        <th className="p-2 border ... text-left w-[1%] whitespace-nowrap"></th>
+                      )}
+                    
+                      {isAdmin && (
+                        <th className="p-2 border border-slate-200 dark:border-slate-700 text-left">Actions</th>
+                      )}
                     </tr>
                   </thead>
 					<tbody>
 					  {rosterLoading && (
 						<tr>
-						  <td colSpan={isAdmin ? 4 : 3} className="p-4 text-center text-slate-500 dark:text-slate-400">
+						  <td colSpan={isAdmin ? 4 : 4} className="p-4 text-center text-slate-500 dark:text-slate-400">
 							<span className="inline-flex items-center gap-2">
 							  <Spinner className="h-4 w-4" />
 							  Loading roster…
@@ -613,67 +718,99 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 						</tr>
 					  )}
 
-					  {!rosterLoading && roster.map((r) => (
-						<tr
-						  key={`${r.ReservationId}-${r.Player}`}
-						  className="hover:bg-slate-50 dark:hover:bg-slate-800/60"
-						>
-						  <td className="p-2 border border-slate-200 dark:border-slate-700">{r.Player}</td>
-						  <td className="p-2 border border-slate-200 dark:border-slate-700">
-							{r.Charge != null ? `$${r.Charge}` : '-'}
-						  </td>
-						  <td className="p-2 border border-slate-200 dark:border-slate-700">
-							{r.PAID != null ? (
-							  <span
-								className={`px-2 py-0.5 rounded text-xs ${
-								  r.PAID
-									? 'bg-green-100 text-green-800 dark:bg-emerald-500/15 dark:text-emerald-200'
-									: 'bg-red-100 text-red-800 dark:bg-rose-500/15 dark:text-rose-200'
-								}`}
-							  >
-								{r.PAID ? 'Yes' : 'No'}
-							  </span>
-							) : (
-							  <span className="text-slate-400 dark:text-slate-500 italic">Private</span>
-							)}
-						  </td>
 
-						  {isAdmin && (
-							<td className="p-2 border border-slate-200 dark:border-slate-700">
-							  <div className="flex items-center gap-2">
-								{updatingPaidFor === r.Player && (
-								  <span className="text-xs text-slate-500 dark:text-slate-400">Updating…</span>
-								)}
-								<button
-								  className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
-											  dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
-											  ${busy ? 'opacity-60 cursor-not-allowed' : ''}`}
-								  onClick={() => setPaid(r.Player, true)}
-								  type="button"
-								  disabled={uiLocked}
-								>
-								  Mark paid
-								</button>
+{!rosterLoading && roster.map((r) => {
+  const isMine =
+    !isAdmin &&
+    myName &&
+    String(r.Player || '').trim().toLowerCase() === myName.toLowerCase();
 
-								<button
-								  className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
-											  dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
-											  ${busy ? 'opacity-60 cursor-not-allowed' : ''}`}
-								  onClick={() => setPaid(r.Player, false)}
-								  type="button"
-								  disabled={uiLocked}
-								>
-								  Unpay
-								</button>
-							  </div>
-							</td>
-						  )}
-						</tr>
-					  ))}
+  return (
+    <tr
+      key={r._sheetRow}
+      className="hover:bg-slate-50 dark:hover:bg-slate-800/60"
+    >
+      <td className="p-2 border border-slate-200 dark:border-slate-700">
+        {r.Player}
+      </td>
+
+      <td className="p-2 border border-slate-200 dark:border-slate-700">
+        {r.Charge != null ? `$${r.Charge}` : '-'}
+      </td>
+
+      <td className="p-2 border border-slate-200 dark:border-slate-700">
+        {r.PAID != null ? (
+          <span
+            className={`px-2 py-0.5 rounded text-xs ${
+              r.PAID
+                ? 'bg-green-100 text-green-800 dark:bg-emerald-500/15 dark:text-emerald-200'
+                : 'bg-red-100 text-red-800 dark:bg-rose-500/15 dark:text-rose-200'
+            }`}
+          >
+            {r.PAID ? 'Yes' : 'No'}
+          </span>
+        ) : (
+          <span className="text-slate-400 dark:text-slate-500 italic">Private</span>
+        )}
+      </td>
+
+      {/* ✅ NON-ADMIN CANCEL BUTTON (only shows on YOUR rows) */}
+      {!isAdmin && (
+        <td className="p-2 border border-slate-200 dark:border-slate-700">
+          {isMine ? (
+            <button
+              type="button"
+              disabled={uiLocked}
+              onClick={() => r._sheetRow && cancelRsvp(r._sheetRow)}
+              className={`rounded px-3 py-1 text-xs font-semibold border
+                border-rose-300 text-rose-700 bg-white hover:bg-rose-50
+                dark:bg-slate-900 dark:border-rose-500/40 dark:text-rose-200 dark:hover:bg-rose-500/10
+                ${uiLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
+            >
+              Cancel
+            </button>
+          ) : null}
+        </td>
+      )}
+
+      {isAdmin && (
+        <td className="p-2 border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-2">
+            {updatingPaidFor === r.Player && (
+              <span className="text-xs text-slate-500 dark:text-slate-400">Updating…</span>
+            )}
+            <button
+              className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
+                          dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
+                          ${busy ? 'opacity-60 cursor-not-allowed' : ''}`}
+              onClick={() => setPaid(r.Player, true)}
+              type="button"
+              disabled={uiLocked}
+            >
+              Mark paid
+            </button>
+
+            <button
+              className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
+                          dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
+                          ${busy ? 'opacity-60 cursor-not-allowed' : ''}`}
+              onClick={() => setPaid(r.Player, false)}
+              type="button"
+              disabled={uiLocked}
+            >
+              Unpay
+            </button>
+          </div>
+        </td>
+      )}
+    </tr>
+  );
+})}
+
 
 					  {!rosterLoading && roster.length === 0 && (
 						<tr>
-						  <td colSpan={isAdmin ? 4 : 3} className="p-4 text-center text-slate-500 dark:text-slate-400">
+						  <td colSpan={isAdmin ? 4 : 4} className="p-4 text-center text-slate-500 dark:text-slate-400">
 							No sign-ups yet
 						  </td>
 						</tr>

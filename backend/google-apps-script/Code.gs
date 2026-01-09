@@ -78,6 +78,19 @@ function doPost(e) {
     return json_(signup_(payload, ctxSignup));
   }
 
+
+  if (action === 'unrsvp') {
+    var ctxUnrsvp = requireAuth_(e, payload);
+    requireRole_(ctxUnrsvp, ['admin', 'memberplus', 'member', 'guest']);
+    return json_(unrsvp_(payload, ctxUnrsvp));
+  }
+
+  if (action === 'cancelrsvp') {
+    var ctxCancel = requireAuth_(e, payload);
+    requireRole_(ctxCancel, ['admin', 'memberplus', 'member', 'guest']);
+    return json_(unrsvp_(payload, ctxCancel));
+  }
+
   if (action === 'markpaid') {
     var ctx = requireAuth_(e, payload);
     requireRole_(ctx, ['admin']);
@@ -138,7 +151,7 @@ function requireAuth_(e, payload) {
   var user = findUserById_(sess.UserId);
   if (!user || !user.Active) throw new Error('invalid_user');
 
-  return { sessionId: sid, user: user, role: user.Role, userId: user.UserId };
+  return { sessionId: sid, user: user, role: user.Role, userId: String(user.UserId) };
 }
 
 function requireRole_(ctx, allowed) {
@@ -326,56 +339,72 @@ function listReservations(userRole) {
 }
 
 function listAttendance_(e, ctx) {
-  var resId = e.parameter.reservationId;
-  var month = e.parameter.month; // YYYY-MM (optional)
 
-  var at = readTable_(sheetByName(ATTENDANCE_SHEET_NAME));
+  var resId = (e && e.parameter && e.parameter.reservationId) ? String(e.parameter.reservationId) : '';
+  var month = (e && e.parameter && e.parameter.month) ? String(e.parameter.month) : '';
+
+  var atSheet = sheetByName(ATTENDANCE_SHEET_NAME);
+  var at = readTable_(atSheet);
   if (at.rows.length === 0) return { ok: true, attendees: [] };
+
   var idx = headerIndexMap_(at.header);
   var isAdmin = (ctx && ctx.role === 'admin');
   var hasUserIdCol = (idx['UserId'] !== undefined);
   var currentUserId = (ctx && ctx.userId) ? String(ctx.userId) : '';
 
-  var rows = at.rows.filter(function(r){
-    if (resId) return String(r[idx['ReservationId']]) === String(resId);
+  var out = [];
 
-    if (month) {
+  for (var i = 0; i < at.rows.length; i++) {
+    var r = at.rows[i];
+
+
+    // Filter: reservationId OR month OR all
+    if (resId) {
+      if (String(r[idx['ReservationId']]) !== String(resId)) continue;
+    } else if (month) {
       var d = r[idx['Date']];
       var ds = (d instanceof Date)
         ? Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM')
         : String(d).substring(0, 7);
-      return ds === month;
+      if (ds !== month) continue;
     }
 
-    return true;
-  }).map(function(r){
+
+    // Skip cancelled rows (robust: handles 0, "0", false, "")
+    if (idx['Present (1/0)'] !== undefined) {
+      var presentRaw = r[idx['Present (1/0)']];
+      if (Number(presentRaw) === 0) continue;
+    }
+
     var rowUserId = '';
     if (hasUserIdCol) rowUserId = String(r[idx['UserId']] || '');
 
-    var isSelf = false;
-    if (rowUserId && currentUserId && rowUserId === currentUserId) isSelf = true;
+    var isSelf = (rowUserId && currentUserId && rowUserId === currentUserId);
 
     var chargeVal = null;
     var paidVal = null;
 
+    // Privacy: only admin or self sees Charge/PAID
     if (isAdmin || isSelf) {
       chargeVal = Number(r[idx['Charge (auto)']]) || 0;
+      // your sheet uses 1/0; keep same behavior
       paidVal = (String(r[idx['PAID']]) === '1');
     }
 
-    return {
+    out.push({
       Date: r[idx['Date']],
       Hours: r[idx['Hours']],
       Player: r[idx['Player Name']],
+      UserId: rowUserId || '',             // ✅ add this
       Present: r[idx['Present (1/0)']],
       Charge: chargeVal,
       PAID: paidVal,
-      ReservationId: r[idx['ReservationId']]
-    };
-  });
+      ReservationId: r[idx['ReservationId']],
+      _sheetRow: i + 2                      // ✅ 1-based sheet row number
+    });
+  }
 
-  return { ok: true, attendees: rows };
-
+  return { ok: true, attendees: out };
 }
 
 function signup_(payload, ctx) {
@@ -441,6 +470,52 @@ function signup_(payload, ctx) {
 
   return { ok: true, perPlayer: perPlayer };
 }
+
+function unrsvp_(payload, ctx) {
+
+  if (!payload.reservationId) return { ok: false, error: 'missing_reservation_id' };
+
+  var sheetRow = Number(payload.sheetRow || 0);
+  if (!sheetRow || sheetRow < 2) return { ok: false, error: 'bad_request' };
+
+  var sh = sheetByName(ATTENDANCE_SHEET_NAME);
+  var t = readTable_(sh);
+  var idx = headerIndexMap_(t.header);
+
+  if (idx['Present (1/0)'] === undefined) return { ok: false, error: 'missing_present_column' };
+
+  // Read the target row values from the sheet
+  // sheetRow is 1-based; range row index in table rows[] is sheetRow - 2
+  var tableRowIndex = sheetRow - 2;
+  if (tableRowIndex < 0 || tableRowIndex >= t.rows.length) return { ok: false, error: 'row_not_found' };
+
+  var row = t.rows[tableRowIndex];
+
+  // Optional safety: ensure reservation matches if provided
+  if (payload.reservationId && idx['ReservationId'] !== undefined) {
+    if (String(row[idx['ReservationId']]) !== String(payload.reservationId)) {
+      return { ok: false, error: 'reservation_mismatch' };
+    }
+  }
+
+  // Permission check: admin can cancel anyone; others only cancel their own rows (when UserId exists)
+  var isAdmin = ctx && ctx.role === 'admin';
+
+  if (!isAdmin) {
+    if (idx['UserId'] === undefined) return { ok: false, error: 'missing_userid_column' };
+    var rowUserId = String(row[idx['UserId']] || '');
+    if (!rowUserId || String(rowUserId) !== String(ctx.userId)) {
+      return { ok: false, error: 'forbidden' };
+    }
+  }
+
+  // Set Present (1/0) = 0
+  sh.getRange(sheetRow, idx['Present (1/0)'] + 1).setValue(0);
+
+  return { ok: true };
+}
+
+
 
 function markPaid_(payload) {
   var at = readTable_(sheetByName(ATTENDANCE_SHEET_NAME));
