@@ -135,6 +135,33 @@ export default function ReservationDrawer({ reservation, onClose, role, user, on
   }
 }
 
+async function adminCancelRsvp(sheetRow) {
+  if (uiLocked) return;
+
+  const ok = window.confirm('Cancel this player RSVP?');
+  if (!ok) return;
+
+  setBusy(true);
+  try {
+    const res = await apiPost('cancelrsvp', {
+      reservationId: reservation.Id,
+      sheetRow, // ✅ cancels ONE specific row
+    });
+
+    if (!res?.ok) {
+      showToast('error', res?.error || 'Failed to cancel RSVP');
+      return;
+    }
+
+    await refreshRoster();
+    showToast('success', 'RSVP cancelled');
+  } catch (e) {
+    showToast('error', 'Failed to cancel RSVP: ' + e.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
   const [updatingPaidFor, setUpdatingPaidFor] = useState(null); // player name or null
   const [toast, setToast] = useState(null); // { type: 'success'|'error', text: string }
 
@@ -799,6 +826,19 @@ export default function ReservationDrawer({ reservation, onClose, role, user, on
               disabled={uiLocked}
             >
               Unpay
+            </button>
+
+
+            <button
+              type="button"
+              disabled={uiLocked}
+              onClick={() => r._sheetRow && adminCancelRsvp(r._sheetRow)}
+              className={`rounded px-3 py-1 text-xs font-semibold border
+                border-rose-300 text-rose-700 bg-white hover:bg-rose-50
+                dark:bg-slate-900 dark:border-rose-500/40 dark:text-rose-200 dark:hover:bg-rose-500/10
+                ${uiLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
+            >
+              Cancel
             </button>
           </div>
         </td>
