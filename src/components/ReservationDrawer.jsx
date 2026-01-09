@@ -33,7 +33,24 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
   const toastTimerRef = useRef(null);
 
-  const [rosterLoading, setRosterLoading] = useState(true); // start true so opening shows spinner immediately
+  // start true so opening shows spinner immediately
+  const [rosterLoading, setRosterLoading] = useState(true); 
+
+  // one lock for ALL actions that touch roster
+  const [busy, setBusy] = useState(false); 
+
+  const uiLocked = busy || rosterLoading;
+
+
+  const refreshRoster = useCallback(async () => {
+    setRosterLoading(true);
+    try {
+      const r = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
+      if (r?.ok) setRoster(r.attendees || []);
+    } finally {
+      setRosterLoading(false);
+    }
+  }, [reservation?.Id]);
 
 
   const handleClose = useCallback(() => {
@@ -79,10 +96,10 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
   // Load roster
   useEffect(() => {
     let cancelled = false;
-
+  
     (async () => {
+      setRosterLoading(true);
       try {
-        setRosterLoading(true);
         const data = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
         if (!cancelled && data.ok) setRoster(data.attendees || []);
       } catch (e) {
@@ -91,10 +108,8 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
         if (!cancelled) setRosterLoading(false);
       }
     })();
-  
-    return () => {
-      cancelled = true;
-    };
+
+    return () => { cancelled = true; };
   }, [reservation?.Id]);
 
   // for toast timer
@@ -179,89 +194,77 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
   }
 
 
-
-
   async function submit() {
-    if (submitting) return; // ✅ prevent double-submits
-    setSubmitting(true);
-
-    const names = isAdmin
-      ? players
-          .map((p, i) => {
-            const v = (p || '').trim();
-            if (!v) return '';
-            if (v === 'Other') return (playerOthers[i] || '').trim();
-            return v;
-          })
-          .filter(Boolean)
-      : [];
-  
-    if (isAdmin && names.length === 0) {
-      setSubmitting(false);
-      return;
-    }
-  
-    if (isAdmin) {
-      const hasOtherMissing = players.some((p, i) => p === 'Other' && !(playerOthers[i] || '').trim());
-      if (hasOtherMissing) {
-        setSubmitting(false);
-        return alert('Please fill in the name for any "Other" player.');
-      }
-    }
+    if (uiLocked) return;
+    setBusy(true);
 
     try {
+      const names = isAdmin
+        ? players
+            .map((p, i) => {
+              const v = (p || '').trim();
+              if (!v) return '';
+              if (v === 'Other') return (playerOthers[i] || '').trim();
+              return v;
+            })
+            .filter(Boolean)
+        : [];
+
+      if (isAdmin && names.length === 0) return;
+
+      if (isAdmin) {
+        const hasOtherMissing = players.some((p, i) => p === 'Other' && !(playerOthers[i] || '').trim());
+        if (hasOtherMissing) return alert('Please fill in the name for any "Other" player.');
+      }
+
       const res = await apiPost('signup', {
         reservationId: reservation.Id,
         ...(isAdmin ? { players: names } : {}),
         markPaid,
         totalAmount: total ? Number(total) : totalFees,
       });
-  
-      if (res.ok) {
-        try {
-          setRosterLoading(true);
-          const r = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
-          if (r.ok) setRoster(r.attendees);
-        } finally {
-          setRosterLoading(false);
-        }
-        setPlayers(['']);
-        setPlayerOthers(['']);
-        showToast('success', 'Saved!');
-      } else {
+
+      if (!res.ok) {
         showToast('error', res.error || 'Failed to sign up');
+        return;
       }
+
+      // IMPORTANT: keep locked while roster refreshes
+      await refreshRoster();
+
+      setPlayers(['']);
+      setPlayerOthers(['']);
+      showToast('success', 'Saved!');
     } catch (e) {
       showToast('error', 'Failed to sign up: ' + e.message);
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
   }
 
   async function setPaid(name, paid) {
-    if (updatingPaidFor) return; // ✅ prevent multiple payment updates at once
+    if (busy) return;
+    setBusy(true);
     setUpdatingPaidFor(name);
-  
+
     try {
       const r1 = await apiPost('markpaid', { reservationId: reservation.Id, player: name, paid });
       if (!r1.ok) {
         showToast('error', r1.error || 'Failed to update');
         return;
       }
-      try {
-        setRosterLoading(true);
-        const r2 = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
-        if (r2.ok) setRoster(r2.attendees);
-      } finally {
-        setRosterLoading(false);
-      }
+
+      await refreshRoster();
       showToast('success', paid ? 'Marked paid' : 'Marked unpaid');
     } catch (e) {
       showToast('error', 'Failed to update payment status: ' + e.message);
     } finally {
       setUpdatingPaidFor(null);
+      setBusy(false);
     }
   }
+
+
 
   // Shared styling helpers (keeps dark mode consistent)
   const modalShellClass = isProposed
@@ -300,9 +303,10 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
       }}
     >
       <div className="min-h-full flex items-center justify-center p-2 sm:p-6 py-8">
-        <div className={`w-full max-w-2xl rounded-xl shadow-2xl border overflow-hidden ${modalShellClass}`}>
+        <div className={`relative w-full max-w-2xl rounded-xl shadow-2xl border overflow-hidden ${modalShellClass}`}>
+
           {/* Sticky header */}
-          <div className={`sticky top-0 z-10 border-b px-4 py-3 ${headerClass}`}>
+          <div className={`sticky top-0 z-30 border-b px-4 py-3 ${headerClass}`}>
             <div className="flex justify-between items-center gap-2">
               <h2 className="text-lg font-semibold truncate flex items-center gap-2 text-slate-900 dark:text-slate-100">
                 {isProposed ? (
@@ -346,6 +350,17 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
               </div>
             </div>
           </div>
+
+          {uiLocked && (
+            <div className="absolute inset-0 z-20 bg-slate-900/10 dark:bg-slate-900/30 backdrop-blur-[1px] flex items-center justify-center">
+              <div className="px-4 py-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow">
+                <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  <Spinner className="h-4 w-4" />
+                  Updating…
+                </span>
+              </div>
+            </div>
+          )}
 
 
           {/* Toast */}
@@ -396,7 +411,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                   return (
                     <div key={i} className="flex gap-2 mb-2 flex-wrap">
                       <div className="flex-1 min-w-[220px]">
-                        <select
+                        <select disabled={uiLocked}
                           className={selectClass}
                           value={p || ''}
                           onChange={(e) => {
@@ -423,7 +438,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
                       {isOther && (
                         <div className="flex-1 min-w-[220px]">
-                          <input
+                          <input disabled={uiLocked}
                             className={inputClass}
                             placeholder="Enter player name"
                             value={playerOthers[i] || ''}
@@ -441,14 +456,14 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                           <button
                             className={`border rounded px-3 py-1 bg-white hover:bg-slate-50 text-slate-900 border-slate-300
                                         dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100 dark:border-slate-700
-                                        ${submitting ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                        ${busy ? 'opacity-60 cursor-not-allowed' : ''}`}
                             onClick={() => {
                               const nextPlayers = [...players, ''];
                               setPlayers(nextPlayers);
                               ensureOtherArrayLength(nextPlayers);
                             }}
                             type="button"
-                            disabled={submitting}
+                            disabled={uiLocked}
                           >
                             + Add
                           </button>
@@ -457,7 +472,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                           <button
                             className={`border rounded px-3 py-1 bg-white hover:bg-slate-50 text-red-600 border-slate-300
                                         dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-red-300 dark:border-slate-700
-                                        ${submitting ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                        ${busy ? 'opacity-60 cursor-not-allowed' : ''}`}
                             onClick={() => {
                               const nextPlayers = players.filter((_, j) => j !== i);
                               const nextOthers = playerOthers.filter((_, j) => j !== i);
@@ -465,7 +480,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                               setPlayerOthers(nextOthers.length ? nextOthers : ['']);
                             }}
                             type="button"
-                            disabled={submitting}
+                            disabled={uiLocked}
                           >
                             Remove
                           </button>
@@ -491,7 +506,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
               {isAdmin && (
                 <label className={`flex items-center gap-2 text-sm mb-2 ${subtleTextClass}`}>
-                  <input type="checkbox" checked={markPaid} onChange={(e) => setMarkPaid(e.target.checked)} />
+                  <input type="checkbox" disabled={uiLocked} checked={markPaid} onChange={(e) => setMarkPaid(e.target.checked)} />
                   Mark as paid now
                 </label>
               )}
@@ -499,26 +514,31 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
               <div className="flex gap-2 mt-3 flex-wrap">
                 <button
                   className={`bg-blue-600 text-white rounded px-4 py-2 font-semibold inline-flex items-center gap-2
-                              ${submitting ? 'opacity-60 cursor-not-allowed' : 'hover:bg-blue-700'}`}
+                              ${uiLocked ? 'opacity-60 cursor-not-allowed' : 'hover:bg-blue-700'}`}
                   onClick={submit}
                   type="button"
-                  disabled={submitting}
+                  disabled={uiLocked}
                 >
-                  {submitting && <Spinner />}
-                  {submitting ? 'Submitting…' : (isProposed ? 'Sign up for proposal' : 'Submit sign-up')}
+                  {uiLocked && <Spinner />}
+                  {uiLocked ? 'Updating…' : (isProposed ? 'Sign up for proposal' : 'Submit sign-up')}
                 </button>
-
-
+                
                 {!isProposed && (
-                  <a
-                    className="rounded px-4 py-2 font-semibold bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors
-                               dark:bg-indigo-500/15 dark:text-indigo-200 dark:hover:bg-indigo-500/25"
-                    href={`${VENMO_URL}?txn=pay&amount=${perPlayer}&note=Pickleball ${reservation.Date} ${reservation.Start}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Pay ${perPlayer} via Venmo
-                  </a>
+                  uiLocked ? (
+                    <span className="rounded px-4 py-2 font-semibold bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300 cursor-not-allowed">
+                      Pay ${perPlayer} via Venmo
+                    </span>
+                  ) : (
+                    <a
+                      className="rounded px-4 py-2 font-semibold bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors
+                                 dark:bg-indigo-500/15 dark:text-indigo-200 dark:hover:bg-indigo-500/25"
+                      href={`${VENMO_URL}?txn=pay&amount=${perPlayer}&note=Pickleball ${reservation.Date} ${reservation.Start}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Pay ${perPlayer} via Venmo
+                    </a>
+                  )
                 )}
               </div>
             </div>
@@ -581,10 +601,10 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 								<button
 								  className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
 											  dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
-											  ${updatingPaidFor ? 'opacity-60 cursor-not-allowed' : ''}`}
+											  ${busy ? 'opacity-60 cursor-not-allowed' : ''}`}
 								  onClick={() => setPaid(r.Player, true)}
 								  type="button"
-								  disabled={!!updatingPaidFor}
+								  disabled={uiLocked}
 								>
 								  Mark paid
 								</button>
@@ -592,10 +612,10 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 								<button
 								  className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
 											  dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
-											  ${updatingPaidFor ? 'opacity-60 cursor-not-allowed' : ''}`}
+											  ${busy ? 'opacity-60 cursor-not-allowed' : ''}`}
 								  onClick={() => setPaid(r.Player, false)}
 								  type="button"
-								  disabled={!!updatingPaidFor}
+								  disabled={uiLocked}
 								>
 								  Unpay
 								</button>
