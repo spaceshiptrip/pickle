@@ -1,8 +1,17 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { VENMO_URL } from '../config';
 import { apiGet, apiPost } from '../api';
 
 const EXTRA_NAME_OPTIONS = ['TBD', 'Other'];
+
+function Spinner({ className = "h-4 w-4" }) {
+  return (
+    <span
+      className={`inline-block animate-spin rounded-full border-2 border-current border-t-transparent ${className}`}
+      aria-hidden="true"
+    />
+  );
+}
 
 export default function ReservationDrawer({ reservation, onClose, role, onEditReservation }) {
   const [players, setPlayers] = useState(['']);
@@ -15,6 +24,44 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
   const isAdmin = role?.toLowerCase() === 'admin';
   const isProposed = reservation.Status === 'proposed';
+
+
+  const [submitting, setSubmitting] = useState(false);
+  const [updatingPaidFor, setUpdatingPaidFor] = useState(null); // player name or null
+  const [toast, setToast] = useState(null); // { type: 'success'|'error', text: string }
+
+
+  const toastTimerRef = useRef(null);
+
+  // start true so opening shows spinner immediately
+  const [rosterLoading, setRosterLoading] = useState(true); 
+
+  // one lock for ALL actions that touch roster
+  const [busy, setBusy] = useState(false); 
+
+  const uiLocked = busy || rosterLoading;
+
+
+  const refreshRoster = useCallback(async () => {
+    setRosterLoading(true);
+    try {
+      const r = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
+      if (r?.ok) setRoster(r.attendees || []);
+    } finally {
+      setRosterLoading(false);
+    }
+  }, [reservation?.Id]);
+
+
+  const handleClose = useCallback(() => {
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+    setToast(null);
+    onClose?.();
+  }, [onClose]);
+
 
   // Lock page scroll while modal is open
   useEffect(() => {
@@ -34,12 +81,13 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
   // ESC to close
   useEffect(() => {
     const onKeyDown = (e) => {
-      if (e.key === 'Escape') onClose?.();
+      if (e.key === 'Escape') handleClose();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+  }, [handleClose]);
 
+  // totalFees calc
   const totalFees = useMemo(() => {
     const fees = (reservation.Fees || []).reduce((a, f) => a + (Number(f.Amount) || 0), 0);
     return (Number(reservation.BaseFee) || 0) + fees;
@@ -48,20 +96,31 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
   // Load roster
   useEffect(() => {
     let cancelled = false;
-
+  
     (async () => {
+      setRosterLoading(true);
       try {
         const data = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
         if (!cancelled && data.ok) setRoster(data.attendees || []);
       } catch (e) {
         if (!cancelled) console.error('Failed to load attendance', e);
+      } finally {
+        if (!cancelled) setRosterLoading(false);
       }
     })();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [reservation?.Id]);
+
+  // for toast timer
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Load user list for admin dropdown
   useEffect(() => {
@@ -109,7 +168,8 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
     return Math.round((amt / count) * 100) / 100;
   }, [total, totalFees, players, playerOthers, isAdmin]);
 
-  const used = roster.length;
+  const used = rosterLoading ? '…' : roster.length;
+
   const cap = reservation.Capacity || 0;
 
   function ensureOtherArrayLength(nextPlayers) {
@@ -119,26 +179,44 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
     setPlayerOthers(nextOthers);
   }
 
-  async function submit() {
-    const names = isAdmin
-      ? players
-          .map((p, i) => {
-            const v = (p || '').trim();
-            if (!v) return '';
-            if (v === 'Other') return (playerOthers[i] || '').trim();
-            return v;
-          })
-          .filter(Boolean)
-      : [];
+  function showToast(type, text, ms = 2000) {
+    setToast({ type, text });
 
-    if (isAdmin && names.length === 0) return;
-
-    if (isAdmin) {
-      const hasOtherMissing = players.some((p, i) => p === 'Other' && !(playerOthers[i] || '').trim());
-      if (hasOtherMissing) return alert('Please fill in the name for any "Other" player.');
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
     }
 
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimerRef.current = null;
+    }, ms);
+  }
+
+
+  async function submit() {
+    if (uiLocked) return;
+    setBusy(true);
+
     try {
+      const names = isAdmin
+        ? players
+            .map((p, i) => {
+              const v = (p || '').trim();
+              if (!v) return '';
+              if (v === 'Other') return (playerOthers[i] || '').trim();
+              return v;
+            })
+            .filter(Boolean)
+        : [];
+
+      if (isAdmin && names.length === 0) return;
+
+      if (isAdmin) {
+        const hasOtherMissing = players.some((p, i) => p === 'Other' && !(playerOthers[i] || '').trim());
+        if (hasOtherMissing) return alert('Please fill in the name for any "Other" player.');
+      }
+
       const res = await apiPost('signup', {
         reservationId: reservation.Id,
         ...(isAdmin ? { players: names } : {}),
@@ -146,26 +224,47 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
         totalAmount: total ? Number(total) : totalFees,
       });
 
-      if (res.ok) {
-        const r = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
-        if (r.ok) setRoster(r.attendees);
-        setPlayers(['']);
-        setPlayerOthers(['']);
+      if (!res.ok) {
+        showToast('error', res.error || 'Failed to sign up');
+        return;
       }
+
+      // IMPORTANT: keep locked while roster refreshes
+      await refreshRoster();
+
+      setPlayers(['']);
+      setPlayerOthers(['']);
+      showToast('success', 'Saved!');
     } catch (e) {
-      alert('Failed to sign up: ' + e.message);
+      showToast('error', 'Failed to sign up: ' + e.message);
+    } finally {
+      setBusy(false);
     }
   }
 
   async function setPaid(name, paid) {
+    if (busy) return;
+    setBusy(true);
+    setUpdatingPaidFor(name);
+
     try {
-      await apiPost('markpaid', { reservationId: reservation.Id, player: name, paid });
-      const r = await apiGet({ action: 'listattendance', reservationId: reservation.Id });
-      if (r.ok) setRoster(r.attendees);
+      const r1 = await apiPost('markpaid', { reservationId: reservation.Id, player: name, paid });
+      if (!r1.ok) {
+        showToast('error', r1.error || 'Failed to update');
+        return;
+      }
+
+      await refreshRoster();
+      showToast('success', paid ? 'Marked paid' : 'Marked unpaid');
     } catch (e) {
-      alert('Failed to update payment status: ' + e.message);
+      showToast('error', 'Failed to update payment status: ' + e.message);
+    } finally {
+      setUpdatingPaidFor(null);
+      setBusy(false);
     }
   }
+
+
 
   // Shared styling helpers (keeps dark mode consistent)
   const modalShellClass = isProposed
@@ -197,16 +296,17 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
       role="dialog"
       aria-modal="true"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose?.();
+        if (e.target === e.currentTarget) handleClose();
       }}
       onTouchStart={(e) => {
-        if (e.target === e.currentTarget) onClose?.();
+        if (e.target === e.currentTarget) handleClose();
       }}
     >
       <div className="min-h-full flex items-center justify-center p-2 sm:p-6 py-8">
-        <div className={`w-full max-w-2xl rounded-xl shadow-2xl border overflow-hidden ${modalShellClass}`}>
+        <div className={`relative w-full max-w-2xl rounded-xl shadow-2xl border overflow-hidden ${modalShellClass}`}>
+
           {/* Sticky header */}
-          <div className={`sticky top-0 z-10 border-b px-4 py-3 ${headerClass}`}>
+          <div className={`sticky top-0 z-30 border-b px-4 py-3 ${headerClass}`}>
             <div className="flex justify-between items-center gap-2">
               <h2 className="text-lg font-semibold truncate flex items-center gap-2 text-slate-900 dark:text-slate-100">
                 {isProposed ? (
@@ -240,7 +340,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                 )}
 
                 <button
-                  onClick={onClose}
+                  onClick={handleClose}
                   className="flex items-center gap-2 text-sm font-bold px-3 py-1 bg-black text-white rounded hover:bg-gray-900 transition-colors"
                   type="button"
                 >
@@ -250,6 +350,34 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
               </div>
             </div>
           </div>
+
+          {uiLocked && (
+            <div className="absolute inset-0 z-20 bg-slate-900/10 dark:bg-slate-900/30 backdrop-blur-[1px] flex items-center justify-center">
+              <div className="px-4 py-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow">
+                <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  <Spinner className="h-4 w-4" />
+                  Updating…
+                </span>
+              </div>
+            </div>
+          )}
+
+
+          {/* Toast */}
+          {toast && (
+            <div
+              className={`mx-4 mt-4 rounded-lg px-3 py-2 text-sm font-semibold
+                ${toast.type === 'success'
+                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:border-emerald-500/30'
+                  : 'bg-rose-50 text-rose-800 border border-rose-200 dark:bg-rose-500/15 dark:text-rose-200 dark:border-rose-500/30'
+                }`}
+              role="status"
+              aria-live="polite"
+            >
+              {toast.text}
+            </div>
+          )}
+
 
           {/* Content */}
           <div className="px-4 py-4 pb-24 text-slate-900 dark:text-slate-100">
@@ -283,7 +411,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                   return (
                     <div key={i} className="flex gap-2 mb-2 flex-wrap">
                       <div className="flex-1 min-w-[220px]">
-                        <select
+                        <select disabled={uiLocked}
                           className={selectClass}
                           value={p || ''}
                           onChange={(e) => {
@@ -310,7 +438,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
                       {isOther && (
                         <div className="flex-1 min-w-[220px]">
-                          <input
+                          <input disabled={uiLocked}
                             className={inputClass}
                             placeholder="Enter player name"
                             value={playerOthers[i] || ''}
@@ -326,19 +454,25 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                       <div className="flex gap-2">
                         {i === players.length - 1 ? (
                           <button
-                            className="border rounded px-3 py-1 bg-white hover:bg-slate-50 text-slate-900 border-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100 dark:border-slate-700"
+                            className={`border rounded px-3 py-1 bg-white hover:bg-slate-50 text-slate-900 border-slate-300
+                                        dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100 dark:border-slate-700
+                                        ${busy ? 'opacity-60 cursor-not-allowed' : ''}`}
                             onClick={() => {
                               const nextPlayers = [...players, ''];
                               setPlayers(nextPlayers);
                               ensureOtherArrayLength(nextPlayers);
                             }}
                             type="button"
+                            disabled={uiLocked}
                           >
                             + Add
                           </button>
+
                         ) : (
                           <button
-                            className="border rounded px-3 py-1 bg-white hover:bg-slate-50 text-red-600 border-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-red-300 dark:border-slate-700"
+                            className={`border rounded px-3 py-1 bg-white hover:bg-slate-50 text-red-600 border-slate-300
+                                        dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-red-300 dark:border-slate-700
+                                        ${busy ? 'opacity-60 cursor-not-allowed' : ''}`}
                             onClick={() => {
                               const nextPlayers = players.filter((_, j) => j !== i);
                               const nextOthers = playerOthers.filter((_, j) => j !== i);
@@ -346,9 +480,11 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                               setPlayerOthers(nextOthers.length ? nextOthers : ['']);
                             }}
                             type="button"
+                            disabled={uiLocked}
                           >
                             Remove
                           </button>
+
                         )}
                       </div>
                     </div>
@@ -370,30 +506,39 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
               {isAdmin && (
                 <label className={`flex items-center gap-2 text-sm mb-2 ${subtleTextClass}`}>
-                  <input type="checkbox" checked={markPaid} onChange={(e) => setMarkPaid(e.target.checked)} />
+                  <input type="checkbox" disabled={uiLocked} checked={markPaid} onChange={(e) => setMarkPaid(e.target.checked)} />
                   Mark as paid now
                 </label>
               )}
 
               <div className="flex gap-2 mt-3 flex-wrap">
                 <button
-                  className="bg-blue-600 text-white rounded px-4 py-2 font-semibold hover:bg-blue-700 transition-colors"
+                  className={`bg-blue-600 text-white rounded px-4 py-2 font-semibold inline-flex items-center gap-2
+                              ${uiLocked ? 'opacity-60 cursor-not-allowed' : 'hover:bg-blue-700'}`}
                   onClick={submit}
                   type="button"
+                  disabled={uiLocked}
                 >
-                  {isProposed ? 'Sign up for proposal' : 'Submit sign-up'}
+                  {uiLocked && <Spinner />}
+                  {uiLocked ? 'Updating…' : (isProposed ? 'Sign up for proposal' : 'Submit sign-up')}
                 </button>
-
+                
                 {!isProposed && (
-                  <a
-                    className="rounded px-4 py-2 font-semibold bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors
-                               dark:bg-indigo-500/15 dark:text-indigo-200 dark:hover:bg-indigo-500/25"
-                    href={`${VENMO_URL}?txn=pay&amount=${perPlayer}&note=Pickleball ${reservation.Date} ${reservation.Start}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Pay ${perPlayer} via Venmo
-                  </a>
+                  uiLocked ? (
+                    <span className="rounded px-4 py-2 font-semibold bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300 cursor-not-allowed">
+                      Pay ${perPlayer} via Venmo
+                    </span>
+                  ) : (
+                    <a
+                      className="rounded px-4 py-2 font-semibold bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors
+                                 dark:bg-indigo-500/15 dark:text-indigo-200 dark:hover:bg-indigo-500/25"
+                      href={`${VENMO_URL}?txn=pay&amount=${perPlayer}&note=Pickleball ${reservation.Date} ${reservation.Start}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Pay ${perPlayer} via Venmo
+                    </a>
+                  )
                 )}
               </div>
             </div>
@@ -410,67 +555,85 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
                       {isAdmin && <th className="p-2 border border-slate-200 dark:border-slate-700 text-left">Actions</th>}
                     </tr>
                   </thead>
+					<tbody>
+					  {rosterLoading && (
+						<tr>
+						  <td colSpan={isAdmin ? 4 : 3} className="p-4 text-center text-slate-500 dark:text-slate-400">
+							<span className="inline-flex items-center gap-2">
+							  <Spinner className="h-4 w-4" />
+							  Loading roster…
+							</span>
+						  </td>
+						</tr>
+					  )}
 
-                  <tbody>
-                    {roster.map((r) => (
-                      <tr
-                        key={`${r.ReservationId}-${r.Player}`}
-                        className="hover:bg-slate-50 dark:hover:bg-slate-800/60"
-                      >
-                        <td className="p-2 border border-slate-200 dark:border-slate-700">{r.Player}</td>
-                        <td className="p-2 border border-slate-200 dark:border-slate-700">
-                          {r.Charge != null ? `$${r.Charge}` : '-'}
-                        </td>
-                        <td className="p-2 border border-slate-200 dark:border-slate-700">
-                          {r.PAID != null ? (
-                            <span
-                              className={`px-2 py-0.5 rounded text-xs ${
-                                r.PAID
-                                  ? 'bg-green-100 text-green-800 dark:bg-emerald-500/15 dark:text-emerald-200'
-                                  : 'bg-red-100 text-red-800 dark:bg-rose-500/15 dark:text-rose-200'
-                              }`}
-                            >
-                              {r.PAID ? 'Yes' : 'No'}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 dark:text-slate-500 italic">Private</span>
-                          )}
-                        </td>
+					  {!rosterLoading && roster.map((r) => (
+						<tr
+						  key={`${r.ReservationId}-${r.Player}`}
+						  className="hover:bg-slate-50 dark:hover:bg-slate-800/60"
+						>
+						  <td className="p-2 border border-slate-200 dark:border-slate-700">{r.Player}</td>
+						  <td className="p-2 border border-slate-200 dark:border-slate-700">
+							{r.Charge != null ? `$${r.Charge}` : '-'}
+						  </td>
+						  <td className="p-2 border border-slate-200 dark:border-slate-700">
+							{r.PAID != null ? (
+							  <span
+								className={`px-2 py-0.5 rounded text-xs ${
+								  r.PAID
+									? 'bg-green-100 text-green-800 dark:bg-emerald-500/15 dark:text-emerald-200'
+									: 'bg-red-100 text-red-800 dark:bg-rose-500/15 dark:text-rose-200'
+								}`}
+							  >
+								{r.PAID ? 'Yes' : 'No'}
+							  </span>
+							) : (
+							  <span className="text-slate-400 dark:text-slate-500 italic">Private</span>
+							)}
+						  </td>
 
-                        {isAdmin && (
-                          <td className="p-2 border border-slate-200 dark:border-slate-700">
-                            <button
-                              className="border rounded px-2 py-0.5 mr-1 bg-white hover:bg-slate-50 text-slate-900 border-slate-300
-                                         dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100 dark:border-slate-700"
-                              onClick={() => setPaid(r.Player, true)}
-                              type="button"
-                            >
-                              Mark paid
-                            </button>
-                            <button
-                              className="border rounded px-2 py-0.5 bg-white hover:bg-slate-50 text-slate-900 border-slate-300
-                                         dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100 dark:border-slate-700"
-                              onClick={() => setPaid(r.Player, false)}
-                              type="button"
-                            >
-                              Unpay
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
+						  {isAdmin && (
+							<td className="p-2 border border-slate-200 dark:border-slate-700">
+							  <div className="flex items-center gap-2">
+								{updatingPaidFor === r.Player && (
+								  <span className="text-xs text-slate-500 dark:text-slate-400">Updating…</span>
+								)}
+								<button
+								  className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
+											  dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
+											  ${busy ? 'opacity-60 cursor-not-allowed' : ''}`}
+								  onClick={() => setPaid(r.Player, true)}
+								  type="button"
+								  disabled={uiLocked}
+								>
+								  Mark paid
+								</button>
 
-                    {roster.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={isAdmin ? 4 : 3}
-                          className="p-4 text-center text-slate-500 dark:text-slate-400"
-                        >
-                          No sign-ups yet
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
+								<button
+								  className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
+											  dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
+											  ${busy ? 'opacity-60 cursor-not-allowed' : ''}`}
+								  onClick={() => setPaid(r.Player, false)}
+								  type="button"
+								  disabled={uiLocked}
+								>
+								  Unpay
+								</button>
+							  </div>
+							</td>
+						  )}
+						</tr>
+					  ))}
+
+					  {!rosterLoading && roster.length === 0 && (
+						<tr>
+						  <td colSpan={isAdmin ? 4 : 3} className="p-4 text-center text-slate-500 dark:text-slate-400">
+							No sign-ups yet
+						  </td>
+						</tr>
+					  )}
+					</tbody>
+
                 </table>
               </div>
             </div>
@@ -482,7 +645,7 @@ export default function ReservationDrawer({ reservation, onClose, role, onEditRe
 
       {/* Mobile fail-safe close button */}
       <button
-        onClick={onClose}
+        onClick={handleClose}
         className="fixed bottom-4 right-4 z-[60] bg-black text-white px-4 py-3 rounded-full font-bold shadow-lg hover:bg-gray-900 sm:hidden"
         type="button"
         aria-label="Close dialog"
