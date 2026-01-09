@@ -1,9 +1,10 @@
 {
   "name": "checkin-app",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/write-version.js",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -14,7 +15,11 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.1.18",
     "@vitejs/plugin-react-swc": "^3.7.0",
+    "autoprefixer": "^10.4.23",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18",
     "vite": "^6.0.0"
   }
 }
