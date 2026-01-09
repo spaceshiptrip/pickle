@@ -36,6 +36,31 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
     const [approvalsLoading, setApprovalsLoading] = useState(false);
     const [approvalsError, setApprovalsError] = useState('');
 
+    // Shared UI classes (light + dark)
+    const panelWrapClass =
+        'mt-8 border rounded p-3 bg-gray-50 text-slate-900 border-slate-200 ' +
+        'dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700';
+
+    const cardClass =
+        'border rounded p-3 bg-white shadow-sm border-slate-200 ' +
+        'dark:bg-slate-800 dark:border-slate-700';
+
+    const inputClass =
+        'border rounded px-2 py-1 w-full bg-white text-slate-900 border-slate-300 placeholder:text-slate-400 ' +
+        'dark:bg-slate-900 dark:text-slate-100 dark:border-slate-600 dark:placeholder:text-slate-500 ' +
+        'focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500';
+
+    const selectClass =
+        'border rounded px-2 py-1 w-full bg-white text-slate-900 border-slate-300 ' +
+        'dark:bg-slate-900 dark:text-slate-100 dark:border-slate-600 ' +
+        'focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500';
+
+    const labelClass = 'block text-xs text-slate-500 dark:text-slate-400';
+
+    const smallButtonClass =
+        'text-xs border px-2 py-1 rounded bg-white text-slate-700 border-slate-300 hover:bg-slate-50 ' +
+        'dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600 dark:hover:bg-slate-700';
+
     // When editReservation prop changes, pre-fill the form and scroll into view
     useEffect(() => {
         if (editReservation) {
@@ -68,6 +93,7 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
 
     useEffect(() => {
         load();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     async function loadApprovals() {
@@ -165,33 +191,33 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
     };
 
     return (
-        <div className="mt-8 border rounded p-3 bg-gray-50">
+        <div className={panelWrapClass}>
             <div className="flex justify-between items-center mb-3">
-                <div className="font-semibold text-lg">Organizer Admin</div>
-                <button onClick={load} className="text-xs border px-2 py-1 rounded bg-white">
+                <div className="font-semibold text-lg text-slate-900 dark:text-slate-100">Organizer Admin</div>
+                <button onClick={load} className={smallButtonClass}>
                     Refresh Data
                 </button>
             </div>
 
             <div className="grid sm:grid-cols-2 gap-4 mb-6">
                 {/* Reservation Form */}
-                <div id="admin-reservation-form" className="border rounded p-3 bg-white shadow-sm">
-                    <div className="font-medium mb-2 text-blue-800">
+                <div id="admin-reservation-form" className={cardClass}>
+                    <div className="font-medium mb-2 text-blue-800 dark:text-blue-200">
                         {isAdmin ? (form.Id ? 'Edit Session' : 'Create Session') : 'Propose a Session'}
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
                         <input
-                            className="border rounded px-2 py-1 col-span-2"
-                            placeholder="(optional) Id to update exisitng"
+                            className={inputClass + ' col-span-2'}
+                            placeholder="(optional) Id to update existing"
                             value={form.Id || ''}
                             onChange={(e) => setForm({ ...form, Id: e.target.value })}
                         />
 
                         <div className="col-span-2">
-                            <label className="block text-xs text-gray-500">Date</label>
+                            <label className={labelClass}>Date</label>
                             <input
-                                className="border rounded px-2 py-1 w-full"
+                                className={inputClass}
                                 type="date"
                                 value={form.Date}
                                 onChange={(e) => setForm({ ...form, Date: e.target.value })}
@@ -199,9 +225,9 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                         </div>
 
                         <div>
-                            <label className="block text-xs text-gray-500">Start</label>
+                            <label className={labelClass}>Start</label>
                             <input
-                                className="border rounded px-2 py-1 w-full"
+                                className={inputClass}
                                 type="time"
                                 value={form.Start}
                                 onChange={(e) => setForm({ ...form, Start: e.target.value })}
@@ -209,9 +235,9 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                         </div>
 
                         <div>
-                            <label className="block text-xs text-gray-500">End</label>
+                            <label className={labelClass}>End</label>
                             <input
-                                className="border rounded px-2 py-1 w-full"
+                                className={inputClass}
                                 type="time"
                                 value={form.End}
                                 onChange={(e) => setForm({ ...form, End: e.target.value })}
@@ -222,10 +248,10 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                             <>
                                 {/* ✅ Court dropdown + conditional "Other" input */}
                                 <div className="col-span-2">
-                                    <label className="block text-xs text-gray-500">Court</label>
+                                    <label className={labelClass}>Court</label>
                                     <div className="flex gap-2">
                                         <select
-                                            className="border rounded px-2 py-1 w-full"
+                                            className={selectClass}
                                             value={COURT_OPTIONS.includes(form.Court) ? form.Court : 'Other'}
                                             onChange={(e) => {
                                                 const next = e.target.value;
@@ -248,7 +274,7 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                                                 form.Court !== 'Other' && !COURT_OPTIONS.includes(form.Court) ? form.Court : courtOther;
                                             return (
                                                 <input
-                                                    className="border rounded px-2 py-1 w-full"
+                                                    className={inputClass}
                                                     placeholder="Enter court name"
                                                     value={shownValue}
                                                     onChange={(e) => {
@@ -263,9 +289,9 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                                 </div>
 
                                 <div>
-                                    <label className="block text-xs text-gray-500">Capacity</label>
+                                    <label className={labelClass}>Capacity</label>
                                     <input
-                                        className="border rounded px-2 py-1 w-full"
+                                        className={inputClass}
                                         placeholder="Capacity"
                                         type="number"
                                         value={form.Capacity}
@@ -274,9 +300,9 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                                 </div>
 
                                 <div className="col-span-1">
-                                    <label className="block text-xs text-gray-500">Base Fee ($)</label>
+                                    <label className={labelClass}>Base Fee ($)</label>
                                     <input
-                                        className="border rounded px-2 py-1 w-full"
+                                        className={inputClass}
                                         placeholder="BaseFee"
                                         type="number"
                                         value={form.BaseFee}
@@ -285,9 +311,14 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                                 </div>
 
                                 <div className="col-span-2">
-                                    <label className="block text-xs text-gray-500">Status</label>
+                                    <label className={labelClass}>Status</label>
                                     <select
-                                        className={`border rounded px-2 py-1 w-full font-bold ${form.Status === 'proposed' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+                                        className={`border rounded px-2 py-1 w-full font-bold border-slate-300
+                                            dark:border-slate-600 dark:bg-slate-900
+                                            ${
+                                                form.Status === 'proposed'
+                                                    ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
+                                                    : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
                                             }`}
                                         value={form.Status}
                                         onChange={(e) => setForm({ ...form, Status: e.target.value })}
@@ -301,8 +332,9 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                     </div>
 
                     <button
-                        className={`border rounded px-3 py-1 mt-3 w-full font-semibold transition-colors ${isAdmin ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-amber-500 text-white hover:bg-amber-600'
-                            }`}
+                        className={`border rounded px-3 py-1 mt-3 w-full font-semibold transition-colors ${
+                            isAdmin ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-amber-500 text-white hover:bg-amber-600'
+                        }`}
                         onClick={saveReservation}
                     >
                         {isAdmin ? 'Save Session' : 'Submit Proposal'}
@@ -310,13 +342,13 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                 </div>
 
                 {isAdmin && (
-                    <div className="border rounded p-3 bg-white shadow-sm">
-                        <div className="font-medium mb-2 text-green-800">Add Extra Fee (e.g., Dinner)</div>
+                    <div className={cardClass}>
+                        <div className="font-medium mb-2 text-green-800 dark:text-emerald-300">Add Extra Fee (e.g., Dinner)</div>
 
                         <div className="mb-2">
-                            <label className="block text-xs text-gray-500">Select Reservation</label>
+                            <label className={labelClass}>Select Reservation</label>
                             <select
-                                className="border rounded px-2 py-1 w-full"
+                                className={selectClass}
                                 value={fee.ReservationId}
                                 onChange={(e) => setFee({ ...fee, ReservationId: e.target.value })}
                             >
@@ -331,18 +363,18 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
 
                         <div className="flex gap-2">
                             <div className="flex-1">
-                                <label className="block text-xs text-gray-500">Fee Name</label>
+                                <label className={labelClass}>Fee Name</label>
                                 <input
-                                    className="border rounded px-2 py-1 w-full"
+                                    className={inputClass}
                                     placeholder="Dinner"
                                     value={fee.FeeName}
                                     onChange={(e) => setFee({ ...fee, FeeName: e.target.value })}
                                 />
                             </div>
                             <div className="w-24">
-                                <label className="block text-xs text-gray-500">Amount ($)</label>
+                                <label className={labelClass}>Amount ($)</label>
                                 <input
-                                    className="border rounded px-2 py-1 w-full"
+                                    className={inputClass}
                                     type="number"
                                     step="0.01"
                                     placeholder="10"
@@ -359,7 +391,7 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                             Add Fee
                         </button>
 
-                        <div className="mt-4 text-xs text-gray-500">
+                        <div className="mt-4 text-xs text-slate-500 dark:text-slate-400">
                             <p>Use this to add shared costs like balls, lights, or post-game food to a specific session.</p>
                         </div>
                     </div>
@@ -367,19 +399,20 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
             </div>
 
             {isAdmin && (
-                <div className="border-t pt-4">
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
                     <div className="flex justify-between items-center mb-4">
-                        <h3 className="font-semibold text-lg">Monthly Report</h3>
+                        <h3 className="font-semibold text-lg text-slate-900 dark:text-slate-100">Monthly Report</h3>
                         <div className="flex gap-2 items-center">
                             <input
                                 type="month"
-                                className="border rounded px-2 py-1"
+                                className={inputClass}
                                 value={reportMonth}
                                 onChange={(e) => setReportMonth(e.target.value)}
                             />
                             <button
                                 onClick={loadReport}
-                                className="bg-gray-800 text-white px-3 py-1 rounded text-sm hover:bg-black"
+                                className="bg-gray-800 text-white px-3 py-1 rounded text-sm hover:bg-black
+                                           dark:bg-slate-700 dark:hover:bg-slate-600"
                             >
                                 {reportLoading ? 'Loading...' : 'Load Report'}
                             </button>
@@ -387,52 +420,53 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                     </div>
 
                     {reportData.length > 0 && (
-                        <div className="bg-white p-4 rounded shadow-sm">
+                        <div className="bg-white p-4 rounded shadow-sm border border-slate-200
+                                        dark:bg-slate-800 dark:border-slate-700">
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4 text-center">
-                                <div className="p-2 bg-blue-50 rounded">
-                                    <div className="text-xl font-bold text-blue-800">{reportStats.uniquePlayers}</div>
-                                    <div className="text-xs text-blue-600 uppercase">Unique Players</div>
+                                <div className="p-2 bg-blue-50 rounded dark:bg-blue-500/10">
+                                    <div className="text-xl font-bold text-blue-800 dark:text-blue-200">{reportStats.uniquePlayers}</div>
+                                    <div className="text-xs text-blue-600 dark:text-blue-300 uppercase">Unique Players</div>
                                 </div>
-                                <div className="p-2 bg-green-50 rounded">
-                                    <div className="text-xl font-bold text-green-800">${reportStats.totalCollected.toFixed(2)}</div>
-                                    <div className="text-xs text-green-600 uppercase">Total Collected</div>
+                                <div className="p-2 bg-green-50 rounded dark:bg-emerald-500/10">
+                                    <div className="text-xl font-bold text-green-800 dark:text-emerald-200">${reportStats.totalCollected.toFixed(2)}</div>
+                                    <div className="text-xs text-green-600 dark:text-emerald-300 uppercase">Total Collected</div>
                                 </div>
-                                <div className="p-2 bg-gray-50 rounded">
-                                    <div className="text-xl font-bold text-gray-800">{reportStats.totalPlayers}</div>
-                                    <div className="text-xs text-gray-600 uppercase">Check-ins</div>
+                                <div className="p-2 bg-gray-50 rounded dark:bg-slate-700/40">
+                                    <div className="text-xl font-bold text-gray-800 dark:text-slate-100">{reportStats.totalPlayers}</div>
+                                    <div className="text-xs text-gray-600 dark:text-slate-300 uppercase">Check-ins</div>
                                 </div>
-                                <div className="p-2 bg-red-50 rounded">
-                                    <div className="text-xl font-bold text-red-800">{reportStats.unpaidCount}</div>
-                                    <div className="text-xs text-red-600 uppercase">Unpaid</div>
+                                <div className="p-2 bg-red-50 rounded dark:bg-rose-500/10">
+                                    <div className="text-xl font-bold text-red-800 dark:text-rose-200">{reportStats.unpaidCount}</div>
+                                    <div className="text-xs text-red-600 dark:text-rose-300 uppercase">Unpaid</div>
                                 </div>
                             </div>
 
                             <div className="flex justify-end mb-2">
                                 <button
                                     onClick={() => copyToClipboard(reportStats.totalCollected.toFixed(2))}
-                                    className="text-xs text-blue-600 underline"
+                                    className="text-xs text-blue-600 underline dark:text-blue-300"
                                 >
                                     Copy Total ($)
                                 </button>
                             </div>
 
-                            <div className="max-h-60 overflow-y-auto border rounded">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="bg-gray-100 sticky top-0">
+                            <div className="max-h-60 overflow-y-auto border rounded border-slate-200 dark:border-slate-700">
+                                <table className="w-full text-sm text-left text-slate-800 dark:text-slate-100">
+                                    <thead className="bg-slate-100 sticky top-0 dark:bg-slate-700/50">
                                         <tr>
-                                            <th className="p-2 border-b">Date</th>
-                                            <th className="p-2 border-b">Player</th>
-                                            <th className="p-2 border-b">Charge</th>
-                                            <th className="p-2 border-b">Paid</th>
+                                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">Date</th>
+                                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">Player</th>
+                                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">Charge</th>
+                                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">Paid</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {reportData.map((row, i) => (
-                                            <tr key={i} className="hover:bg-gray-50">
-                                                <td className="p-2 border-b">{row.Date ? String(row.Date).split('T')[0] : ''}</td>
-                                                <td className="p-2 border-b">{row.Player}</td>
-                                                <td className="p-2 border-b">${row.Charge}</td>
-                                                <td className="p-2 border-b text-center">{row.PAID ? '✅' : '❌'}</td>
+                                            <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-700/40">
+                                                <td className="p-2 border-b border-slate-200 dark:border-slate-700">{row.Date ? String(row.Date).split('T')[0] : ''}</td>
+                                                <td className="p-2 border-b border-slate-200 dark:border-slate-700">{row.Player}</td>
+                                                <td className="p-2 border-b border-slate-200 dark:border-slate-700">${row.Charge}</td>
+                                                <td className="p-2 border-b border-slate-200 dark:border-slate-700 text-center">{row.PAID ? '✅' : '❌'}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -444,45 +478,47 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
             )}
 
             {isAdmin && (
-                <div className="border-t pt-4 mt-6">
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-4 mt-6">
                     <div className="flex justify-between items-center mb-4">
-                        <h3 className="font-semibold text-lg">Pending Guest Approvals</h3>
-                        <button onClick={loadApprovals} className="text-xs border px-2 py-1 rounded bg-white">
+                        <h3 className="font-semibold text-lg text-slate-900 dark:text-slate-100">Pending Guest Approvals</h3>
+                        <button onClick={loadApprovals} className={smallButtonClass}>
                             Refresh Approvals
                         </button>
                     </div>
 
-                    <div className="bg-white p-4 rounded shadow-sm border">
+                    <div className="bg-white p-4 rounded shadow-sm border border-slate-200
+                                    dark:bg-slate-800 dark:border-slate-700">
                         {approvalsError && (
-                            <div className="p-3 mb-4 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+                            <div className="p-3 mb-4 bg-red-50 border border-red-200 text-red-700 rounded text-sm
+                                            dark:bg-rose-500/10 dark:border-rose-500/30 dark:text-rose-200">
                                 ⚠️ Error: {approvalsError}
                             </div>
                         )}
 
                         {approvalsLoading ? (
-                            <div className="text-center py-4 text-gray-500">Loading requests...</div>
+                            <div className="text-center py-4 text-slate-500 dark:text-slate-400">Loading requests...</div>
                         ) : approvals.length === 0 ? (
-                            <div className="text-center py-4 text-gray-500 italic">No pending requests</div>
+                            <div className="text-center py-4 text-slate-500 dark:text-slate-400 italic">No pending requests</div>
                         ) : (
                             <div className="max-h-60 overflow-y-auto">
-                                <table className="w-full text-sm text-left border-collapse">
-                                    <thead className="bg-gray-100 sticky top-0">
+                                <table className="w-full text-sm text-left border-collapse text-slate-800 dark:text-slate-100">
+                                    <thead className="bg-slate-100 sticky top-0 dark:bg-slate-700/50">
                                         <tr>
-                                            <th className="p-2 border-b">Name</th>
-                                            <th className="p-2 border-b">Email</th>
-                                            <th className="p-2 border-b">Request Date</th>
-                                            <th className="p-2 border-b text-right">Actions</th>
+                                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">Name</th>
+                                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">Email</th>
+                                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">Request Date</th>
+                                            <th className="p-2 border-b border-slate-200 dark:border-slate-700 text-right">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {approvals.map((req) => (
-                                            <tr key={req.RequestId} className="hover:bg-gray-50">
-                                                <td className="p-2 border-b font-medium">{req.Name}</td>
-                                                <td className="p-2 border-b text-gray-600">{req.Email}</td>
-                                                <td className="p-2 border-b text-gray-500 whitespace-nowrap">
+                                            <tr key={req.RequestId} className="hover:bg-slate-50 dark:hover:bg-slate-700/40">
+                                                <td className="p-2 border-b border-slate-200 dark:border-slate-700 font-medium">{req.Name}</td>
+                                                <td className="p-2 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">{req.Email}</td>
+                                                <td className="p-2 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                                     {new Date(req.CreatedAt).toLocaleDateString()}
                                                 </td>
-                                                <td className="p-2 border-b text-right">
+                                                <td className="p-2 border-b border-slate-200 dark:border-slate-700 text-right">
                                                     <button
                                                         onClick={() => approveGuest(req.RequestId)}
                                                         className="bg-indigo-600 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-indigo-500 transition-colors"
