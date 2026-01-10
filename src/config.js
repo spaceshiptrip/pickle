@@ -13,3 +13,12 @@ export const VENMO_URL = `https://venmo.com/${VENMO_HANDLE.replace('@', '')}`;
 
 // Admin contact (E.164 format)
 export const JAY_PHONE_E164 = '+18186539874';
+
+// src/config.js
+
+export const COURT_LAT = 34.1478;
+export const COURT_LON = -118.1445;
+
+// optional: for clarity / future
+export const COURT_CITY = 'Pasadena, CA';
+export const COURT_TIMEZONE = 'America/Los_Angeles';
