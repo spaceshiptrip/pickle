@@ -3,3 +3,14 @@
 /* Enable class-based dark mode (your App.jsx toggles .dark on <html>) */
 @custom-variant dark (&:where(.dark, .dark *));
 
+
+/* Highlight today's calendar column */
+.fc-day-today-custom {
+  background-color: rgba(59, 130, 246, 0.08); /* blue */
+}
+
+/* Highlight today's reservations */
+.fc-event-today {
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.9); /* green ring */
+  font-weight: 600;
+}
