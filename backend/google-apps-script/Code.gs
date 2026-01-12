@@ -31,7 +31,7 @@ function doGet(e) {
     var ctx = requireAuth_(e, null);
     // allow all roles
     requireRole_(ctx, ['admin', 'memberplus', 'member', 'guest']);
-    return json_(listReservations(ctx.role));
+    return json_(listReservations(ctx));
   }
 
   if (action === 'listattendance') {
@@ -151,12 +151,86 @@ function requireAuth_(e, payload) {
   var user = findUserById_(sess.UserId);
   if (!user || !user.Active) throw new Error('invalid_user');
 
-  return { sessionId: sid, user: user, role: user.Role, userId: String(user.UserId) };
+  return {
+    sessionId: sid,
+    user: user,
+    role: String(user.Role || 'guest').toLowerCase().trim(),
+    userId: String(user.UserId).trim()
+  };
+
 }
 
 function requireRole_(ctx, allowed) {
   if (!ctx || !ctx.role) throw new Error('auth_required');
   if (allowed.indexOf(ctx.role) === -1) throw new Error('forbidden');
+}
+
+function roleRank_(role) {
+  role = String(role || 'guest').toLowerCase();
+  if (role === 'admin') return 4;
+  if (role === 'memberplus') return 3;
+  if (role === 'member') return 2;
+  return 1; // guest
+}
+
+function visibilityRank_(vis) {
+  vis = String(vis || 'member').toLowerCase();
+  if (vis === 'admin') return 4;
+  if (vis === 'memberplus') return 3;
+  if (vis === 'member') return 2;
+  return 1; // guest
+}
+
+function parseUserIdCsv_(s) {
+  return String(s || '')
+    .split(',')
+    .map(function(x){ return String(x).trim(); })
+    .filter(Boolean);
+}
+
+function canSeeReservation_(ctx, resObj) {
+  // Admin sees all
+  if (ctx && String(ctx.role).toLowerCase() === 'admin') return true;
+
+  var userRank = roleRank_(ctx && ctx.role);
+  var reqRank = visibilityRank_(resObj && resObj.Visibility);
+
+  // role-based visibility
+  if (userRank >= reqRank) return true;
+
+  // allowlist visibility (optional)
+  var uid = (ctx && ctx.userId) ? String(ctx.userId) : '';
+  if (!uid) return false;
+
+  var allow = parseUserIdCsv_(resObj && resObj.VisibleToUserIds);
+  return allow.indexOf(uid) !== -1;
+}
+
+
+function reservationStatusMap_() {
+  var rt = readTable_(sheetByName(RESERVATIONS_SHEET_NAME));
+  var idx = headerIndexMap_(rt.header);
+  var out = {};
+  if (idx['Id'] === undefined) return out;
+
+  var statusCol = idx['Status'];
+  for (var i=0;i<rt.rows.length;i++){
+    var r = rt.rows[i];
+    var id = String(r[idx['Id']]);
+    var st = (statusCol !== undefined) ? String(r[statusCol] || '').toLowerCase().trim() : '';
+    out[id] = st || 'reserved';
+  }
+  return out;
+}
+
+
+function parseLocalDateTime_(dateStr, timeStr) {
+  var parts = String(dateStr).split('-'); // yyyy-mm-dd
+  var t = String(timeStr).split(':');     // HH:mm
+  return new Date(
+    Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]),
+    Number(t[0]), Number(t[1] || 0), 0, 0
+  );
 }
 
 
@@ -189,7 +263,9 @@ function sheetByName(name) {
 
 function headerIndexMap_(rowValues) {
   var map = {};
-  for (var i = 0; i < rowValues.length; i++) map[String(rowValues[i])] = i;
+  for (var i = 0; i < rowValues.length; i++) {
+    map[String(rowValues[i]).trim()] = i;
+  }
   return map;
 }
 
@@ -275,14 +351,30 @@ function nextReservationId_() {
 }
 
 /** -------- API impl (existing) -------- */
-function listReservations(userRole) {
-  userRole = String(userRole || 'guest').toLowerCase();
+function isAllowlistedForAny_(ctx, items) {
+  var uid = (ctx && ctx.userId) ? String(ctx.userId) : '';
+  if (!uid) return false;
+
+  return (items || []).some(function(it){
+    var allow = parseUserIdCsv_(it && it.VisibleToUserIds);
+    return allow.indexOf(uid) !== -1;
+  });
+}
+
+
+
+function listReservations(ctx) {
+  var userRole = String((ctx && ctx.role) || 'guest').toLowerCase();
+
   var rs = sheetByName(RESERVATIONS_SHEET_NAME);
   var fs = sheetByName(FEES_SHEET_NAME);
   var rt = readTable_(rs);
   var ft = readTable_(fs);
   var rIdx = headerIndexMap_(rt.header);
   var fIdx = headerIndexMap_(ft.header);
+
+  var hasVisibility = (rIdx['Visibility'] !== undefined);
+  var hasAllow = (rIdx['VisibleToUserIds'] !== undefined);
 
   var feesByRes = {};
   for (var j=0;j<ft.rows.length;j++){
@@ -315,28 +407,37 @@ function listReservations(userRole) {
       Capacity: Number(r[rIdx['Capacity']]) || 0,
       BaseFee: Number(r[rIdx['BaseFee']]) || 0,
       Status: String(r[rIdx['Status']] || 'reserved').toLowerCase().trim(),
+      Visibility: hasVisibility ? normalizeVisibility_(r[rIdx['Visibility']]) : 'member',
+      VisibleToUserIds: hasAllow ? String(r[rIdx['VisibleToUserIds']] || '').trim() : '',
       Fees: feesByRes[id] || []
     };
   });
 
-  // Filter for restricted roles
-  if (userRole === 'member' || userRole === 'guest') {
+  // NEW: apply visibility filter
+  items = items.filter(function(it){ return canSeeReservation_(ctx, it); });
+
+  // Keep your current restriction: members/guests only see the next upcoming allowed event
+  // BUT: if they are explicitly allowlisted on any event, allow full visibility of allowed items.
+  var allowlisted = isAllowlistedForAny_(ctx, items);
+  
+  if ((userRole === 'member' || userRole === 'guest') && !allowlisted) {
     var now = new Date();
-    // Sort items by date and start time to find the "next" one
     items.sort(function(a, b) {
       return a.Date.localeCompare(b.Date) || a.Start.localeCompare(b.Start);
     });
 
     var nextEvent = items.find(function(item) {
-      var eventStart = new Date(item.Date + 'T' + item.Start + ':00');
+      var eventStart = parseLocalDateTime_(item.Date, item.Start);
+
       return eventStart >= now;
     });
-
+  
     items = nextEvent ? [nextEvent] : [];
   }
 
   return { ok: true, reservations: items };
 }
+
 
 function listAttendance_(e, ctx) {
 
@@ -349,6 +450,9 @@ function listAttendance_(e, ctx) {
 
   var idx = headerIndexMap_(at.header);
   var isAdmin = (ctx && ctx.role === 'admin');
+
+  var resStatus = reservationStatusMap_();
+
   var hasUserIdCol = (idx['UserId'] !== undefined);
   var currentUserId = (ctx && ctx.userId) ? String(ctx.userId) : '';
 
@@ -368,6 +472,14 @@ function listAttendance_(e, ctx) {
         : String(d).substring(0, 7);
       if (ds !== month) continue;
     }
+
+
+    // NEW: skip attendance for cancelled reservations
+    if (idx['ReservationId'] !== undefined) {
+      var rid = String(r[idx['ReservationId']] || '');
+      if (rid && resStatus[rid] === 'cancelled') continue;
+    }
+
 
 
     // Skip cancelled rows (robust: handles 0, "0", false, "")
@@ -544,21 +656,26 @@ function markPaid_(payload) {
     return { ok: true };
   }
 
-  // 🔁 Backward-compatible fallback: old behavior by reservationId + player
+  // 🔁 Backward-compatible fallback (ONLY if unambiguous)
   if (!payload.reservationId || !payload.player) return { ok: false, error: 'bad_request' };
 
+  var matches = [];
   for (var i = 0; i < at.rows.length; i++) {
     var r = at.rows[i];
     if (
       String(r[idx['ReservationId']]) === String(payload.reservationId) &&
-      String(r[idx['Player Name']]).trim().toLowerCase() === String(payload.player).trim().toLowerCase()
+      String(r[idx['Player Name']]).trim().toLowerCase() === String(payload.player).trim().toLowerCase() &&
+      (idx['Present (1/0)'] === undefined || Number(r[idx['Present (1/0)']]) !== 0) // only active rows
     ) {
-      sh.getRange(i + 2, idx['PAID'] + 1).setValue(payload.paid ? 1 : 0);
-      return { ok: true };
+      matches.push(i);
     }
   }
 
-  return { ok: false, error: 'player_not_found' };
+  if (matches.length === 0) return { ok: false, error: 'player_not_found' };
+  if (matches.length > 1) return { ok: false, error: 'ambiguous_match_use_sheetrow' };
+
+  sh.getRange(matches[0] + 2, idx['PAID'] + 1).setValue(payload.paid ? 1 : 0);
+  return { ok: true };
 }
 
 
@@ -568,6 +685,10 @@ function markPaid_(payload) {
  */
 function upsertReservation_(payload) {
   var sh = sheetByName(RESERVATIONS_SHEET_NAME);
+
+  var status = String(payload.Status || 'reserved').toLowerCase().trim();
+  var visibility = normalizeVisibility_(payload.Visibility);
+
   var row = {
     'Id': payload.Id || nextReservationId_(),
     'Date': payload.Date,
@@ -576,11 +697,15 @@ function upsertReservation_(payload) {
     'Court': payload.Court,
     'Capacity': payload.Capacity,
     'BaseFee': payload.BaseFee,
-    'Status': payload.Status || 'reserved'
+    'Status': status,
+    'Visibility': visibility,
+    'VisibleToUserIds': String(payload.VisibleToUserIds || '').trim()
   };
+
   upsertRowById_(sh, 'Id', row);
   return { ok: true, reservation: row };
 }
+
 
 function addFee_(payload) {
   var sh = sheetByName(FEES_SHEET_NAME);
@@ -642,7 +767,9 @@ function auth_loginWithPin_(payload) {
   var user = findUserByPhone_(phone);
   if (!user || !user.Active) return { ok: false, error: 'invalid_login' };
   var role = String(user.Role || '').toLowerCase();
-  if (role !== 'admin' && role !== 'memberplus' && role !== 'member') return { ok: false, error: 'invalid_login' };
+
+  if (role !== 'admin' && role !== 'memberplus' && role !== 'member' && role !== 'guest')
+    return { ok: false, error: 'invalid_login' };
 
   if (!verifyPin_(pin, user.PinHash)) return { ok: false, error: 'invalid_login' };
 
@@ -657,7 +784,7 @@ function auth_requestMagicLink_(payload) {
   var user = findUserByEmail_(email);
 
   // 1. Approved Guest: Send a new fresh link
-  if (user && user.Active && user.Role === 'guest') {
+  if (user && user.Active && String(user.Role).toLowerCase().trim() === 'guest') {
     var token = createAuthToken_(user.UserId, MAGIC_LINK_TTL_MIN);
     sendMagicLinkEmail_(email, token);
     return { ok: true, message: 'Welcome back! You are already approved. A new magic link has been sent to your email.' };
@@ -703,7 +830,17 @@ function auth_whoami_(payload) {
   if (!user || !user.Active) return { ok: true, user: null };
 
   // minimal user payload
-  return { ok: true, user: { userId: user.UserId, role: user.Role, name: user.Name, phone: user.Phone, email: user.Email } };
+  return {
+    ok: true,
+    user: {
+      userId: user.UserId,
+      role: String(user.Role || 'guest').toLowerCase().trim(),
+      name: user.Name,
+      phone: user.Phone,
+      email: user.Email
+    }
+  };
+
 }
 
 function auth_logout_(payload) {
@@ -1073,6 +1210,13 @@ function deleteSession_(sessionId) {
   return false;
 }
 
+function normalizeVisibility_(v) {
+  v = String(v || 'member').toLowerCase().trim();
+  if (v === 'admin' || v === 'memberplus' || v === 'member' || v === 'guest') return v;
+  return 'member';
+}
+
+
 /** -------- Email sending -------- */
 function sendMagicLinkEmail_(toEmail, token) {
   // Option A (recommended): link goes to your site and your frontend calls auth.consumeToken
@@ -1135,16 +1279,14 @@ function round2_(n){ return Math.round((Number(n)||0)*100)/100; }
 /** ---- Setup note (one-time) ----
 Create these headers exactly:
 
-Reservations:  Id | Date | Start | End | Court | Capacity | BaseFee
-Attendance:    Date | Hours | Player Name | Present (1/0) | Charge (auto) | PAID | ReservationId
+Reservations:  Id | Date | Start | End | Court | Capacity | BaseFee | Status | Visibility | VisibleToUserIds
+Attendance: Date | Hours | Player Name | UserId | Present (1/0) | Charge (auto) | PAID | ReservationId
 Fees:          ReservationId | FeeName | Amount
-
-NEW:
 Users:         UserId | Role | Name | Phone | Email | Venmo | PinHash | Active
 AuthTokens:    Token | UserId | ExpiresAt | Used | CreatedAt
 Sessions:      SessionId | UserId | Role | CreatedAt | ExpiresAt | Revoked
 
-Role values: admin | member | guest
+Role values: admin | memberplus | member | guest
 Active: 1 or 0
 
 PIN hashing:
