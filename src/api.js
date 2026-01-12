@@ -31,16 +31,23 @@ export async function apiPost(action, body) {
   const sessionId = getSessionId();
   const res = await fetch(`${APP_SCRIPT_URL}?action=${action}`, {
     method: 'POST',
-    body: JSON.stringify({
-      ...body,
-      sessionId // Automatically include session if we have one
-    }),
+    body: JSON.stringify({ ...body, sessionId }),
   });
-  if (!res.ok) throw new Error('API error');
-  const data = await res.json();
-  if (data.ok === false) throw new Error(data.error || 'Request failed');
+
+  let data = null;
+  try {
+    data = await res.json();
+  } catch (_) {}
+
+  if (!res.ok) {
+    throw new Error(data?.error || 'api_error');
+  }
+  if (data?.ok === false) {
+    throw new Error(data.error || 'request_failed');
+  }
   return data;
 }
+
 
 /** Auth Endpoints */
 export const authApi = {
