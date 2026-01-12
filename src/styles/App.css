@@ -183,3 +183,33 @@ button:disabled {
   font-weight: 600;
   vertical-align: middle;
 }
+
+
+/* -----------------------------
+   FullCalendar mobile UI tweaks
+   ----------------------------- */
+@media (max-width: 520px) {
+  .fc .fc-toolbar {
+    gap: 0.25rem;
+  }
+
+  .fc .fc-toolbar-title {
+    font-size: 1rem;
+    line-height: 1.1;
+  }
+
+  .fc .fc-button {
+    padding: 0.25rem 0.45rem;
+    font-size: 0.8rem;
+    line-height: 1;
+  }
+
+  .fc .fc-button .fc-icon {
+    font-size: 1rem;
+  }
+
+  .fc .fc-toolbar.fc-header-toolbar {
+    margin-bottom: 0.5rem;
+  }
+}
+
