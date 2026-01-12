@@ -7,6 +7,8 @@ import AuthView from './components/AuthView.jsx';
 import { authApi } from './api';
 import logo from './assets/AthPicklersLogo.png';
 import spaceshiplogo from './assets/SpaceshipTripLogo.png';
+import SettingsView from './components/SettingsView';
+
 
 const THEME_KEY = 'pickle_theme'; // 'light' | 'dark'
 
@@ -23,6 +25,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [editingReservation, setEditingReservation] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
+
 
   // Theme
   const [theme, setTheme] = useState(getInitialTheme);
@@ -106,6 +110,7 @@ export default function App() {
       if (sessionId) await authApi.logout(sessionId);
     } catch (e) {}
     localStorage.removeItem('pickle_session_id');
+    setShowSettings(false); // ✅ ADD THIS
     setUser(null);
   };
 
@@ -123,6 +128,17 @@ export default function App() {
         onLoginSuccess={onLoginSuccess}
         theme={theme}
         onToggleTheme={toggleTheme}
+      />
+    );
+  }
+
+
+  // ✅ PUT THIS RIGHT HERE
+  if (showSettings) {
+    return (
+      <SettingsView
+        theme={theme}
+        onDone={() => setShowSettings(false)}
       />
     );
   }
@@ -196,6 +212,21 @@ export default function App() {
 >
   Logout
 </button>
+
+<button
+  type="button"
+  onClick={() => setShowSettings(true)}
+  className="ml-2 inline-flex items-center justify-center rounded-xl
+             px-3 py-2 text-sm font-extrabold
+             bg-slate-200 hover:bg-slate-300 text-slate-800
+             dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-100
+             transition"
+  aria-label="Open settings"
+  title="Settings"
+>
+  ⚙️
+</button>
+
 
               </div>
             </div>

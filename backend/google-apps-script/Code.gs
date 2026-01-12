@@ -121,6 +121,16 @@ function doPost(e) {
     return json_(approveGuest_(payload));
   }
 
+  if (action === 'auth.updatelogin') {
+    var ctxSet = requireAuth_(e, payload);
+    return json_(auth_updateLogin_(payload, ctxSet));
+  }
+  if (action === 'auth.updatepin') {
+    var ctxPin = requireAuth_(e, payload);
+    return json_(auth_updatePin_(payload, ctxPin));
+  }
+
+
   // New auth actions (recommended to call with JSON {action:"auth.loginWithPin", ...})
   if (action === 'auth.loginwithpin') return json_(auth_loginWithPin_(payload));
   if (action === 'auth.requestmagiclink') return json_(auth_requestMagicLink_(payload));
@@ -130,6 +140,54 @@ function doPost(e) {
 
   return json_({ ok: false, error: 'unknown_action' }, 400);
 }
+
+
+/** -------- Settings helpers -------- */
+function updateUserField_(userId, colName, value) {
+  var sh = sheetByName(USERS_SHEET_NAME);
+  var t = readTable_(sh);
+  var idx = headerIndexMap_(t.header);
+
+  if (idx['UserId'] === undefined) throw new Error('Users missing UserId');
+  if (idx[colName] === undefined) throw new Error('Users missing ' + colName);
+
+  for (var i=0;i<t.rows.length;i++){
+    var r = t.rows[i];
+    if (String(r[idx['UserId']]) === String(userId)) {
+      sh.getRange(i+2, idx[colName]+1).setValue(value);
+      return true;
+    }
+  }
+  return false;
+}
+
+function auth_updateLogin_(payload, ctx) {
+  var newLogin = String(payload.newLogin || '').trim();
+  if (!newLogin) return { ok:false, error:'bad_request' };
+
+  var h = hashLoginId_(newLogin);
+  if (!h) return { ok:false, error:'invalid_login_format' };
+
+  if (isLoginHashTaken_(h, ctx.userId)) return { ok:false, error:'login_taken' };
+
+  updateUserField_(ctx.userId, 'LoginHash', h);
+  return { ok:true };
+}
+
+function auth_updatePin_(payload, ctx) {
+  var oldPin = String(payload.oldPin || '').trim();
+  var newPin = String(payload.newPin || '').trim();
+  if (!oldPin || !newPin) return { ok:false, error:'bad_request' };
+
+  // verify old pin
+  if (!verifyPin_(oldPin, ctx.user.PinHash)) return { ok:false, error:'invalid_old_pin' };
+
+  var salt = getPinSalt_();
+  var newHash = sha256Hex_(salt + ':' + newPin);
+  updateUserField_(ctx.userId, 'PinHash', newHash);
+  return { ok:true };
+}
+
 
 /** -------- Request helpers -------- */
 
@@ -759,15 +817,39 @@ Roles:
 */
 
 function auth_loginWithPin_(payload) {
-  var phone = normalizePhone_(payload.phone);
+
+  // DEBUG
+  Logger.log('login payload: ' + JSON.stringify(payload));
+
+
+
+  var loginId = String(
+    payload.loginId ||           // preferred (camelCase)
+    payload.loginid ||           // in case client lowercases
+    payload.login ||             // alias
+    payload.phone ||
+    payload.email ||
+    ''
+  ).trim();
+
+
   var pin = String(payload.pin || '').trim();
 
-  if (!phone || !pin) return { ok: false, error: 'bad_request' };
+  if (!loginId || !pin) return { ok: false, error: 'bad_request' };
 
-  var user = findUserByPhone_(phone);
+  // Prefer hashed lookup
+  var user = findUserByLoginIdentifier_(loginId);
+
+  // Backward-compat: if LoginHash isn't populated yet, fallback to phone/email lookup
+  if (!user) {
+    var c = canonicalizeLogin_(loginId);
+    if (c.ok && c.kind === 'phone') user = findUserByPhone_(c.normalized);
+    if (c.ok && c.kind === 'email') user = findUserByEmail_(c.normalized);
+  }
+
   if (!user || !user.Active) return { ok: false, error: 'invalid_login' };
-  var role = String(user.Role || '').toLowerCase();
 
+  var role = String(user.Role || '').toLowerCase();
   if (role !== 'admin' && role !== 'memberplus' && role !== 'member' && role !== 'guest')
     return { ok: false, error: 'invalid_login' };
 
@@ -777,11 +859,13 @@ function auth_loginWithPin_(payload) {
   return { ok: true, session: session };
 }
 
+
 function auth_requestMagicLink_(payload) {
   var email = normalizeEmail_(payload.email);
   if (!email) return { ok: true, message: 'If approved, you will receive an email shortly.' };
 
-  var user = findUserByEmail_(email);
+  var user = findUserByLoginIdentifier_(email) || findUserByEmail_(email); // fallback during migration
+
 
   // 1. Approved Guest: Send a new fresh link
   if (user && user.Active && String(user.Role).toLowerCase().trim() === 'guest') {
@@ -836,8 +920,7 @@ function auth_whoami_(payload) {
       userId: user.UserId,
       role: String(user.Role || 'guest').toLowerCase().trim(),
       name: user.Name,
-      phone: user.Phone,
-      email: user.Email
+      venmo: user.Venmo
     }
   };
 
@@ -918,6 +1001,8 @@ function findUserByPhone_(phone) {
   var t = readTable_(sheetByName(USERS_SHEET_NAME));
   var idx = headerIndexMap_(t.header);
 
+  if (idx['Phone'] === undefined) return null;
+
   for (var i=0;i<t.rows.length;i++) {
     var r = t.rows[i];
     var p = normalizePhone_(r[idx['Phone']]);
@@ -929,6 +1014,9 @@ function findUserByPhone_(phone) {
 function findUserByEmail_(email) {
   var t = readTable_(sheetByName(USERS_SHEET_NAME));
   var idx = headerIndexMap_(t.header);
+
+
+  if (idx['Email'] === undefined) return null;
 
   for (var i=0;i<t.rows.length;i++) {
     var r = t.rows[i];
@@ -949,6 +1037,44 @@ function findUserById_(userId) {
   return null;
 }
 
+
+function findUserByLoginHash_(loginHash) {
+  var t = readTable_(sheetByName(USERS_SHEET_NAME));
+  var idx = headerIndexMap_(t.header);
+
+  if (idx['LoginHash'] === undefined) throw new Error('Users sheet missing LoginHash column');
+
+  for (var i = 0; i < t.rows.length; i++) {
+    var r = t.rows[i];
+    var h = String(r[idx['LoginHash']] || '').trim();
+    if (h && h === String(loginHash).trim()) return rowToUser_(t.header, r, idx);
+  }
+  return null;
+}
+
+function findUserByLoginIdentifier_(loginInput) {
+  var h = hashLoginId_(loginInput);
+  if (!h) return null;
+  return findUserByLoginHash_(h);
+}
+
+function isLoginHashTaken_(loginHash, exceptUserId) {
+  var t = readTable_(sheetByName(USERS_SHEET_NAME));
+  var idx = headerIndexMap_(t.header);
+  if (idx['LoginHash'] === undefined) throw new Error('Users sheet missing LoginHash column');
+
+  for (var i = 0; i < t.rows.length; i++) {
+    var r = t.rows[i];
+    var rowHash = String(r[idx['LoginHash']] || '').trim();
+    if (!rowHash) continue;
+    if (rowHash === String(loginHash).trim()) {
+      var uid = String(r[idx['UserId']] || '').trim();
+      if (!exceptUserId || uid !== String(exceptUserId).trim()) return true;
+    }
+  }
+  return false;
+}
+
 function rowToUser_(header, row, idx) {
   var activeRaw = row[idx['Active']];
   var active = (String(activeRaw).trim() === '1' || String(activeRaw).toLowerCase() === 'true');
@@ -959,11 +1085,13 @@ function rowToUser_(header, row, idx) {
     Name: String(row[idx['Name']] || '').trim(),
     Phone: normalizePhone_(row[idx['Phone']]),
     Email: normalizeEmail_(row[idx['Email']]),
+    LoginHash: (idx['LoginHash'] !== undefined) ? String(row[idx['LoginHash']] || '').trim() : '',
     Venmo: String(row[idx['Venmo']] || '').trim(),
     PinHash: String(row[idx['PinHash']] || '').trim(),
     Active: active
   };
 }
+
 
 /** -------- Approval helpers -------- */
 function listApprovals_() {
@@ -1023,11 +1151,17 @@ function approveGuest_(payload) {
 
   var newUser = {};
   ut.header.forEach(function(h) { newUser[h] = ''; });
-  newUser['UserId'] = maxId + 1;
+  newUser['UserId'] = String(maxId + 1);
   newUser['Role'] = 'guest';
   newUser['Name'] = name;
   newUser['Email'] = email;
+
+  var h = hashLoginId_(email);
+  if (!h) return { ok:false, error:'invalid_email' };
+  newUser['LoginHash'] = h;
+
   newUser['Active'] = 1;
+
 
   ush.appendRow(ut.header.map(function(h) { return newUser[h]; }));
 
@@ -1255,12 +1389,80 @@ function normalizePhone_(s) {
 }
 
 
+/** -------- HASH -------- */
 function generateMyHash() {
   const myPin = "1234"; // <-- Change this to the PIN you want!
   const salt = PropertiesService.getScriptProperties().getProperty("PIN_SALT_V1");
   const hash = sha256Hex_(salt + ":" + myPin);
   Logger.log("Your PIN Hash is: " + hash);
 }
+
+// --- Login canonicalization + deterministic hash (phone OR email) ---
+
+function canonicalizeLogin_(raw) {
+  raw = String(raw || '').trim();
+  if (!raw) return { ok: false, error: 'missing_login' };
+
+  // Treat as email if it contains "@"
+  if (raw.indexOf('@') >= 0) {
+    var email = raw.toLowerCase().trim();
+    // basic validation
+    var re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!re.test(email)) return { ok: false, error: 'invalid_email' };
+    return { ok: true, kind: 'email', normalized: email };
+  }
+
+  // Otherwise treat as phone
+  var digits = raw.replace(/[^\d]/g, '');
+  if (digits.length === 11 && digits[0] === '1') digits = digits.slice(1);
+  if (digits.length !== 10) return { ok: false, error: 'invalid_phone' };
+  return { ok: true, kind: 'phone', normalized: digits };
+}
+
+/**
+ * Deterministic hash used for login lookup.
+ * IMPORTANT: prefix kind to avoid phone/email collisions.
+ * phone -> sha256("phone:8186539874")
+ * email -> sha256("email:jay.torres@gmail.com")
+ */
+function hashLoginId_(input) {
+  var c = canonicalizeLogin_(input);
+  if (!c.ok) return '';
+  return sha256Hex_(c.kind + ':' + c.normalized);
+}
+
+
+function migrateUsersToLoginHash_() {
+  var sh = sheetByName(USERS_SHEET_NAME);
+  var t = readTable_(sh);
+  var idx = headerIndexMap_(t.header);
+
+  if (idx['LoginHash'] === undefined) throw new Error('Add LoginHash column first');
+
+  for (var i = 0; i < t.rows.length; i++) {
+    var r = t.rows[i];
+    var existing = String(r[idx['LoginHash']] || '').trim();
+    if (existing) continue;
+
+    var email = (idx['Email'] !== undefined) ? normalizeEmail_(r[idx['Email']]) : '';
+    var phone = (idx['Phone'] !== undefined) ? normalizePhone_(r[idx['Phone']]) : '';
+
+    var source = email || phone;
+    if (!source) continue;
+
+    var h = hashLoginId_(source);
+    if (!h) {
+      Logger.log('Row ' + (i + 2) + ' invalid login source: ' + source);
+      continue;
+    }
+
+    sh.getRange(i + 2, idx['LoginHash'] + 1).setValue(h);
+  }
+
+  Logger.log('Done migrating LoginHash.');
+}
+
+
 
 /** -------- Response helpers -------- */
 function json_(obj, status) {
@@ -1282,7 +1484,8 @@ Create these headers exactly:
 Reservations:  Id | Date | Start | End | Court | Capacity | BaseFee | Status | Visibility | VisibleToUserIds
 Attendance: Date | Hours | Player Name | UserId | Present (1/0) | Charge (auto) | PAID | ReservationId
 Fees:          ReservationId | FeeName | Amount
-Users:         UserId | Role | Name | Phone | Email | Venmo | PinHash | Active
+Users:         UserId | Role | Name | Phone | Email | LoginHash | Venmo | PinHash | Active
+
 AuthTokens:    Token | UserId | ExpiresAt | Used | CreatedAt
 Sessions:      SessionId | UserId | Role | CreatedAt | ExpiresAt | Revoked
 

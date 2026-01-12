@@ -4,7 +4,8 @@ import logo from '../assets/AthPicklersLogo.png';
 
 export default function AuthView({ onLoginSuccess, theme = 'light', onToggleTheme }) {
   const [tab, setTab] = useState('member');
-  const [phone, setPhone] = useState('');
+  const [loginId, setLoginId] = useState('');
+
   const [pin, setPin] = useState('');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
@@ -22,13 +23,22 @@ export default function AuthView({ onLoginSuccess, theme = 'light', onToggleThem
 				}, []);
 
 
+  useEffect(() => {
+    setError('');
+    setMessage('');
+    setLoading(false);
+  }, [tab]);
+
+
+
   const handleMemberLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     setMessage('');
     try {
-      const res = await authApi.loginWithPin(phone, pin);
+      const res = await authApi.loginWithPin(loginId, pin);
+
       if (res.ok && res.session) onLoginSuccess(res.session);
     } catch (err) {
       setError(err.message || 'Login failed');
@@ -122,13 +132,14 @@ export default function AuthView({ onLoginSuccess, theme = 'light', onToggleThem
           <form onSubmit={handleMemberLogin} className="space-y-6">
             <div>
               <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
-                Phone Number
+               Login 
               </label>
               <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="10 digit number"
+                type="text"
+                value={loginId}
+                onChange={(e) => setLoginId(e.target.value)}
+                placeholder="8185551234 or name@example.com"
+
                 className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
                            text-slate-900 dark:text-white placeholder:text-slate-400
                            focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"

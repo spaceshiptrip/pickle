@@ -31,22 +31,38 @@ export async function apiPost(action, body) {
   const sessionId = getSessionId();
   const res = await fetch(`${APP_SCRIPT_URL}?action=${action}`, {
     method: 'POST',
-    body: JSON.stringify({
-      ...body,
-      sessionId // Automatically include session if we have one
-    }),
+    body: JSON.stringify({ ...body, sessionId }),
   });
-  if (!res.ok) throw new Error('API error');
-  const data = await res.json();
-  if (data.ok === false) throw new Error(data.error || 'Request failed');
+
+  let data = null;
+  try {
+    data = await res.json();
+  } catch (_) {}
+
+  if (!res.ok) {
+    throw new Error(data?.error || 'api_error');
+  }
+  if (data?.ok === false) {
+    throw new Error(data.error || 'request_failed');
+  }
   return data;
 }
 
+
 /** Auth Endpoints */
 export const authApi = {
-  loginWithPin: (phone, pin) => apiPost('auth.loginwithpin', { phone, pin }),
+  loginWithPin: (loginId, pin) => apiPost('auth.loginwithpin', { loginId, pin }),
+
   requestMagicLink: (email, name) => apiPost('auth.requestmagiclink', { email, name }),
   consumeToken: (token) => apiPost('auth.consumetoken', { token }),
   logout: (sessionId) => apiPost('auth.logout', { sessionId }),
   whoAmI: (sessionId) => apiPost('auth.whoami', { sessionId }),
 };
+
+
+export const settingsApi = {
+  updateLogin: (newLogin) => apiPost('auth.updatelogin', { newLogin }),
+  updatePin: (oldPin, newPin) => apiPost('auth.updatepin', { oldPin, newPin }),
+};
+
+
