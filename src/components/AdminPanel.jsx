@@ -3,6 +3,17 @@ import { apiGet, apiPost } from '../api';
 
 const COURT_OPTIONS = ['North', 'South', 'Other'];
 
+
+function Spinner({ className = "h-4 w-4" }) {
+  return (
+    <span
+      className={`inline-block animate-spin rounded-full border-2 border-current border-t-transparent ${className}`}
+      aria-hidden="true"
+    />
+  );
+}
+
+
 export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
     const isAdmin = role?.toLowerCase() === 'admin';
     const isMemberPlus = role?.toLowerCase() === 'memberplus';
@@ -39,6 +50,9 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
     const [approvalsError, setApprovalsError] = useState('');
 
     const [preCancelStatus, setPreCancelStatus] = useState(null);
+
+    const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+
 
     // Shared UI classes (light + dark)
     const panelWrapClass =
@@ -85,22 +99,86 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
         }
     }, [editReservation]);
 
-    async function load() {
-        setLoading(true);
-        try {
-            const r = await apiGet({ action: 'listreservations' });
-            if (r.ok) setReservations(r.reservations);
-        } catch (e) {
-            console.error(e);
-        }
-        setLoading(false);
-        loadApprovals();
+
+const [mounted, setMounted] = useState(true);
+
+useEffect(() => {
+  setMounted(true);
+  return () => setMounted(false);
+}, []);
+
+
+
+    function resetForm() {
+      setForm({
+        Id: '',
+        Date: '',
+        Start: '',
+        End: '',
+        Court: 'North',
+        Capacity: 8,
+        BaseFee: 5,
+        Status: 'reserved',
+        Visibility: 'member',
+        VisibleToUserIds: ''
+      });
+      setCourtOther('');
+      setPreCancelStatus(null);
     }
+
+function onClickCancelUpdates() {
+  if (loading) return;
+  setShowCancelConfirm(true);
+}
+
+
+function confirmCancelUpdates() {
+  resetForm();
+  setShowCancelConfirm(false);
+}
+
+function dismissCancelUpdates() {
+  setShowCancelConfirm(false);
+}
+
+
+async function load() {
+  setLoading(true);
+  try {
+    const r = await apiGet({ action: 'listreservations' });
+    if (mounted && r.ok) setReservations(r.reservations);
+    await loadApprovals();
+  } catch (e) {
+    console.error(e);
+  } finally {
+    if (mounted) setLoading(false);
+  }
+}
+
 
     useEffect(() => {
         load();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+
+useEffect(() => {
+  if (!showCancelConfirm) return;
+
+function onKeyDown(e) {
+  if (e.key === 'Escape') dismissCancelUpdates();
+
+  if (e.key === 'Enter') {
+    const tag = (document.activeElement?.tagName || '').toLowerCase();
+    const isTyping = tag === 'input' || tag === 'textarea' || tag === 'select';
+    if (!isTyping) confirmCancelUpdates();
+  }
+}
+
+  window.addEventListener('keydown', onKeyDown);
+  return () => window.removeEventListener('keydown', onKeyDown);
+}, [showCancelConfirm]);
+
 
     async function loadApprovals() {
         setApprovalsLoading(true);
@@ -144,42 +222,34 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
         setReportLoading(false);
     }
 
-    async function saveReservation() {
-        if (!form.Date || !form.Start || !form.End) return alert('Missing fields');
+async function saveReservation() {
+  if (!form.Date || !form.Start || !form.End) {
+    alert('Missing fields');
+    return;
+  }
 
-        // If "Other" selected, ensure they typed something and persist that into Court
-        let payload = { ...form };
-        if (payload.Court === 'Other') {
-            const typed = (courtOther || '').trim();
-            if (!typed) return alert('Please enter a court name for "Other".');
-            payload.Court = typed;
-        }
+  let payload = { ...form };
+  if (payload.Court === 'Other') {
+    const typed = (courtOther || '').trim();
+    if (!typed) return alert('Please enter a court name for "Other".');
+    payload.Court = typed;
+  }
 
-        try {
-            const r = await apiPost('upsertreservation', payload);
-            if (r.ok) {
-                setForm({
-                  Id: '',
-                  Date: '',
-                  Start: '',
-                  End: '',
-                  Court: 'North',
-                  Capacity: 8,
-                  BaseFee: 5,
-                  Status: 'reserved',
-                  Visibility: 'member',
-                  VisibleToUserIds: ''
-                });
-
-                setCourtOther('');
-                load();
-                if (onSaveSuccess) onSaveSuccess();
-                alert(form.Id ? 'Saved!' : 'Session Created!');
-            }
-        } catch (e) {
-            alert('Error: ' + e.message);
-        }
+  setLoading(true);
+  try {
+    const r = await apiPost('upsertreservation', payload);
+    if (r.ok) {
+      resetForm();
+      load();
+      if (onSaveSuccess) onSaveSuccess();
+      alert(form.Id ? 'Saved!' : 'Session Created!');
     }
+  } catch (e) {
+    alert('Error: ' + e.message);
+  } finally {
+    setLoading(false);
+  }
+}
 
     async function addFee() {
         if (!fee.ReservationId) return;
@@ -212,9 +282,15 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
         <div className={panelWrapClass}>
             <div className="flex justify-between items-center mb-3">
                 <div className="font-semibold text-lg text-slate-900 dark:text-slate-100">Organizer Admin</div>
-                <button onClick={load} className={smallButtonClass}>
-                    Refresh Data
-                </button>
+<button
+  onClick={load}
+  disabled={loading}
+  className={`${smallButtonClass} flex items-center gap-2 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+>
+  {loading && <Spinner className="h-3 w-3" />}
+  Refresh Data
+</button>
+
             </div>
 
             <div className="grid sm:grid-cols-2 gap-4 mb-6">
@@ -401,7 +477,7 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
     }}
 
   >
-    {form.Status === 'cancelled' ? 'RESUME' : 'CANCEL'}
+    {form.Status === 'cancelled' ? 'RESUME Event' : 'CANCEL Event'}
   </button>
 
   {form.Status === 'cancelled' && (
@@ -415,14 +491,40 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                         )}
                     </div>
 
-                    <button
-                        className={`border rounded px-3 py-1 mt-3 w-full font-semibold transition-colors ${
-                            isAdmin ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-amber-500 text-white hover:bg-amber-600'
-                        }`}
-                        onClick={saveReservation}
-                    >
-                        {isAdmin ? 'Save Session' : 'Submit Proposal'}
-                    </button>
+
+
+<div className="grid grid-cols-2 gap-2 mt-3">
+<button
+  disabled={loading}
+  className={`border rounded px-3 py-1 w-full font-semibold transition-colors flex items-center justify-center gap-2 ${
+    loading
+      ? 'bg-slate-400 cursor-not-allowed'
+      : isAdmin
+        ? 'bg-blue-600 text-white hover:bg-blue-700'
+        : 'bg-amber-500 text-white hover:bg-amber-600'
+  }`}
+  onClick={saveReservation}
+>
+  {loading && <Spinner />}
+  {isAdmin ? 'Save Reservation' : 'Submit Proposal'}
+</button>
+
+<button
+  type="button"
+  disabled={loading}
+  className="border rounded px-3 py-1 w-full font-semibold bg-white text-slate-700 border-slate-300
+             hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed
+             dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600 dark:hover:bg-slate-700"
+  onClick={onClickCancelUpdates}
+>
+  {isAdmin ? 'Cancel Updates' : 'Cancel'}
+</button>
+
+
+
+
+</div>
+
                 </div>
 
                 {isAdmin && (
@@ -619,6 +721,56 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                     </div>
                 </div>
             )}
+
+
+{showCancelConfirm && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center px-4" role="dialog" aria-modal="true">
+    {/* Backdrop */}
+    <div
+      className="absolute inset-0 bg-black/50"
+      onClick={dismissCancelUpdates}
+      aria-hidden="true"
+    />
+
+    {/* Modal */}
+    <div
+      className="relative w-full max-w-md rounded-2xl border bg-white p-4 shadow-xl border-slate-200
+                 dark:bg-slate-900 dark:border-slate-700"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+        Discard changes?
+      </div>
+      <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+        This will clear the form fields. Your existing saved reservations won’t be changed.
+      </div>
+
+      <div className="mt-4 flex gap-2 justify-end">
+        <button
+          type="button"
+          className="border rounded-lg px-3 py-2 text-sm font-semibold bg-white text-slate-700 border-slate-300 hover:bg-slate-50
+                     dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600 dark:hover:bg-slate-700"
+          onClick={dismissCancelUpdates}
+        >
+          Keep editing
+        </button>
+
+        <button
+          type="button"
+          disabled={loading}
+          onClick={confirmCancelUpdates}
+          className="border rounded-lg px-3 py-2 text-sm font-extrabold bg-rose-600 text-white
+                     hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          {loading && <Spinner className="h-4 w-4" />}
+          Yes, clear it
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+
         </div>
     );
 }
