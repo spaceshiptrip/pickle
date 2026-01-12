@@ -518,22 +518,49 @@ function unrsvp_(payload, ctx) {
 
 
 function markPaid_(payload) {
-  var at = readTable_(sheetByName(ATTENDANCE_SHEET_NAME));
-  var idx = headerIndexMap_(at.header);
   var sh = sheetByName(ATTENDANCE_SHEET_NAME);
+  var at = readTable_(sh);
+  var idx = headerIndexMap_(at.header);
 
-  for (var i=0;i<at.rows.length;i++){
+  if (idx['PAID'] === undefined) return { ok: false, error: 'missing_paid_column' };
+
+  // ✅ Preferred: direct update by sheetRow (unambiguous)
+  var sheetRow = Number(payload.sheetRow || 0);
+  if (sheetRow && sheetRow >= 2) {
+    var tableRowIndex = sheetRow - 2;
+    if (tableRowIndex < 0 || tableRowIndex >= at.rows.length) {
+      return { ok: false, error: 'row_not_found' };
+    }
+
+    // Optional safety: ensure reservation matches
+    if (payload.reservationId && idx['ReservationId'] !== undefined) {
+      var row = at.rows[tableRowIndex];
+      if (String(row[idx['ReservationId']]) !== String(payload.reservationId)) {
+        return { ok: false, error: 'reservation_mismatch' };
+      }
+    }
+
+    sh.getRange(sheetRow, idx['PAID'] + 1).setValue(payload.paid ? 1 : 0);
+    return { ok: true };
+  }
+
+  // 🔁 Backward-compatible fallback: old behavior by reservationId + player
+  if (!payload.reservationId || !payload.player) return { ok: false, error: 'bad_request' };
+
+  for (var i = 0; i < at.rows.length; i++) {
     var r = at.rows[i];
-    if (String(r[idx['ReservationId']]) === String(payload.reservationId) &&
-        String(r[idx['Player Name']]).trim().toLowerCase() === String(payload.player).trim().toLowerCase()) {
-      var rowNum = i + 2;
-      var colNum = idx['PAID'] + 1;
-      sh.getRange(rowNum, colNum).setValue(payload.paid ? 1 : 0);
+    if (
+      String(r[idx['ReservationId']]) === String(payload.reservationId) &&
+      String(r[idx['Player Name']]).trim().toLowerCase() === String(payload.player).trim().toLowerCase()
+    ) {
+      sh.getRange(i + 2, idx['PAID'] + 1).setValue(payload.paid ? 1 : 0);
       return { ok: true };
     }
   }
+
   return { ok: false, error: 'player_not_found' };
 }
+
 
 /** 
  * Upserts a reservation.

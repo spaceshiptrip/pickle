@@ -162,7 +162,7 @@ async function adminCancelRsvp(sheetRow) {
   }
 }
 
-  const [updatingPaidFor, setUpdatingPaidFor] = useState(null); // player name or null
+  const [updatingPaidFor, setUpdatingPaidFor] = useState(null); // sheet row or null
   const [toast, setToast] = useState(null); // { type: 'success'|'error', text: string }
 
 
@@ -378,28 +378,34 @@ async function adminCancelRsvp(sheetRow) {
     }
   }
 
-  async function setPaid(name, paid) {
-    if (busy) return;
-    setBusy(true);
-    setUpdatingPaidFor(name);
 
-    try {
-      const r1 = await apiPost('markpaid', { reservationId: reservation.Id, player: name, paid });
-      if (!r1.ok) {
-        showToast('error', r1.error || 'Failed to update');
-        return;
-      }
+async function setPaid(sheetRow, paid) {
+  if (uiLocked) return;
 
-      await refreshRoster();
-      showToast('success', paid ? 'Marked paid' : 'Marked unpaid');
-    } catch (e) {
-      showToast('error', 'Failed to update payment status: ' + e.message);
-    } finally {
-      setUpdatingPaidFor(null);
-      setBusy(false);
+  setBusy(true); // lock everything while we update + refresh
+  try {
+    setUpdatingPaidFor(sheetRow);
+
+    const res = await apiPost('markpaid', {
+      reservationId: reservation.Id,
+      sheetRow,          // ✅ unambiguous row target
+      paid: !!paid,
+    });
+
+    if (!res?.ok) {
+      showToast('error', res?.error || 'Failed to update paid status');
+      return;
     }
-  }
 
+    await refreshRoster();
+    showToast('success', paid ? 'Marked paid' : 'Marked unpaid');
+  } catch (e) {
+    showToast('error', 'Failed to update paid status: ' + e.message);
+  } finally {
+    setUpdatingPaidFor(null);
+    setBusy(false);
+  }
+}
 
 
   // Shared styling helpers (keeps dark mode consistent)
@@ -725,7 +731,8 @@ async function adminCancelRsvp(sheetRow) {
                       <th className="p-2 border border-slate-200 dark:border-slate-700 text-left">Paid</th>
 
                       {!isAdmin && (
-                        <th className="p-2 border ... text-left w-[1%] whitespace-nowrap"></th>
+                        <th className="p-2 border border-slate-200 dark:border-slate-700 text-left w-[1%] whitespace-nowrap"></th>
+
                       )}
                     
                       {isAdmin && (
@@ -803,30 +810,22 @@ async function adminCancelRsvp(sheetRow) {
       {isAdmin && (
         <td className="p-2 border border-slate-200 dark:border-slate-700">
           <div className="flex items-center gap-2">
-            {updatingPaidFor === r.Player && (
+            {updatingPaidFor === r._sheetRow && (
               <span className="text-xs text-slate-500 dark:text-slate-400">Updating…</span>
             )}
-            <button
-              className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
-                          dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
-                          ${busy ? 'opacity-60 cursor-not-allowed' : ''}`}
-              onClick={() => setPaid(r.Player, true)}
-              type="button"
-              disabled={uiLocked}
-            >
-              Mark paid
-            </button>
 
-            <button
-              className={`border rounded px-2 py-0.5 bg-white hover:bg-gray-50
-                          dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
-                          ${busy ? 'opacity-60 cursor-not-allowed' : ''}`}
-              onClick={() => setPaid(r.Player, false)}
-              type="button"
-              disabled={uiLocked}
-            >
-              Unpay
-            </button>
+
+<button
+  type="button"
+  disabled={uiLocked || r.PAID == null}
+  onClick={() => r._sheetRow && setPaid(r._sheetRow, !r.PAID)}
+
+  className={`border rounded px-2 py-0.5 bg-white hover:bg-slate-50
+            dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800
+            ${uiLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
+>
+  {r.PAID ? 'Unpay' : 'Mark paid'}
+</button>
 
 
             <button
