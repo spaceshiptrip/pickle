@@ -18,6 +18,32 @@ function useIsMobile(breakpointPx = 520) {
   return isMobile;
 }
 
+function Spinner({ className = "h-4 w-4" }) {
+  return (
+    <svg
+      className={`animate-spin ${className}`}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+        fill="none"
+      />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"
+      />
+    </svg>
+  );
+}
+
+
 function codeToEmoji(code) {
   if (code === 0) return '☀️';
   if ([1, 2].includes(code)) return '⛅️';
@@ -42,17 +68,32 @@ export default function CalendarView({ onSelectReservation }) {
   const isMobile = useIsMobile(520);
   const calRef = useRef(null);
   const [activeView, setActiveView] = useState('dayGridMonth');
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const data = await apiGet({ action: 'listreservations' });
-        if (data.ok) setItems(data.reservations);
-      } catch (e) {
-        console.error('Failed to load reservations', e);
-      }
-    })();
-  }, [key]);
+
+useEffect(() => {
+  (async () => {
+    setLoading(true);
+    try {
+      const data = await apiGet({ action: 'listreservations' });
+      if (data.ok) setItems(data.reservations);
+    } catch (e) {
+      console.error('Failed to load reservations', e);
+    } finally {
+      setLoading(false);
+    }
+  })();
+}, [key]);
+
+useEffect(() => {
+  const btn = document.querySelector('.fc-refreshIndicator-button');
+  if (!btn) return;
+
+  if (loading) btn.classList.add('is-loading');
+  else btn.classList.remove('is-loading');
+}, [loading]);
+
+
 
   useEffect(() => {
     if (!showWeather) {
@@ -175,15 +216,18 @@ export default function CalendarView({ onSelectReservation }) {
             {forecastDays === 16 ? '16' : '7'}
           </button>
 
-          <button
-            type="button"
-            className={iconBtn}
-            onClick={() => setKey((k) => k + 1)}
-            title="Refresh"
-            aria-label="Refresh"
-          >
-            ↻
-          </button>
+    {/* ⭐ OPTIONAL separate indicator */}
+    {loading && (
+      <div
+        className="inline-flex items-center"
+        title="Loading calendar…"
+        aria-label="Loading calendar…"
+      >
+        <Spinner />
+      </div>
+    )}
+
+
         </div>
 
         {/* right side: mobile view switcher icons */}
@@ -195,61 +239,78 @@ export default function CalendarView({ onSelectReservation }) {
           </div>
         )}
       </div>
+{/* Dim + disable calendar interactions while loading */}
+<div className={loading ? "opacity-60 pointer-events-none" : ""}>
+  <FullCalendar
+    ref={calRef}
+    key={key}
+    plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+    initialView={activeView}
 
-      <FullCalendar
-        ref={calRef}
-        key={key}
-        plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-        initialView={activeView}
-        headerToolbar={
-          isMobile
-            ? {
-                left: 'prev,next today',
-                center: 'title',
-                right: '', // ✅ hide big Month/Week/Day on mobile
-              }
-            : {
-                left: 'prev,next today',
-                center: 'title',
-                right: 'dayGridMonth,timeGridWeek,timeGridDay',
-              }
-        }
-        // keep activeView in sync if user changes view some other way
-        datesSet={(arg) => setActiveView(arg.view.type)}
-        titleFormat={isMobile ? { year: 'numeric', month: 'short' } : undefined}
-        dayCellClassNames={(arg) => (arg.isToday ? ['fc-day-today-custom'] : [])}
-        dayCellContent={(arg) => {
-          const dayNumber = arg.dayNumberText;
-          if (!showWeather) return dayNumber;
+    // ✅ Add a toolbar button right next to "today"
+customButtons={{
+  refreshIndicator: {
+    text: '↻',
+    click: () => {
+      if (!loading) setKey(k => k + 1);
+    },
+  },
+}}
 
-          const dateStr = arg.date.toISOString().slice(0, 10);
-          const w = weatherByDate[dateStr];
-          if (!w) return dayNumber;
+    headerToolbar={
+      isMobile
+        ? {
+            left: 'prev,next today refreshIndicator',
+            center: 'title',
+            right: '', // hide big Month/Week/Day buttons on mobile
+          }
+        : {
+            left: 'prev,next today refreshIndicator',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay',
+          }
+    }
 
-          const emoji = codeToEmoji(w.code);
-          const hi = Math.round(w.hi);
-          const lo = Math.round(w.lo);
+    // keep activeView in sync if user changes view some other way
+    datesSet={(arg) => setActiveView(arg.view.type)}
+    titleFormat={isMobile ? { year: 'numeric', month: 'short' } : undefined}
+    dayCellClassNames={(arg) => (arg.isToday ? ['fc-day-today-custom'] : [])}
 
-          return (
-            <div style={{ lineHeight: 1.1 }}>
-              <div>{dayNumber}</div>
-              <div
-                className="fc-weather-mini"
-                title={`High ${hi}° / Low ${lo}° · Rain ${w.pop ?? 0}%`}
-              >
-                {emoji} {hi}/{lo}
-              </div>
-            </div>
-          );
-        }}
-        events={events}
-        eventClick={(info) => onSelectReservation(info.event.extendedProps)}
-        height="auto"
-        nowIndicator
-        allDaySlot={false}
-        slotMinTime="06:00:00"
-        slotMaxTime="23:00:00"
-      />
+    dayCellContent={(arg) => {
+      const dayNumber = arg.dayNumberText;
+      if (!showWeather) return dayNumber;
+
+      const dateStr = arg.date.toISOString().slice(0, 10);
+      const w = weatherByDate[dateStr];
+      if (!w) return dayNumber;
+
+      const emoji = codeToEmoji(w.code);
+      const hi = Math.round(w.hi);
+      const lo = Math.round(w.lo);
+
+      return (
+        <div style={{ lineHeight: 1.1 }}>
+          <div>{dayNumber}</div>
+          <div
+            className="fc-weather-mini"
+            title={`High ${hi}° / Low ${lo}° · Rain ${w.pop ?? 0}%`}
+          >
+            {emoji} {hi}/{lo}
+          </div>
+        </div>
+      );
+    }}
+
+    events={events}
+    eventClick={(info) => onSelectReservation(info.event.extendedProps)}
+    height="auto"
+    nowIndicator
+    allDaySlot={false}
+    slotMinTime="06:00:00"
+    slotMaxTime="23:00:00"
+  />
+</div>
+
     </div>
   );
 }

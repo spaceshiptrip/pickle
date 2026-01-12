@@ -213,3 +213,65 @@ button:disabled {
   }
 }
 
+
+/* Spin the FullCalendar refreshIndicator button while loading */
+.fc .fc-refreshIndicator-button {
+  font-size: 1rem;
+}
+
+.fc .fc-refreshIndicator-button.fc-button {
+  transition: transform 0.15s ease;
+}
+
+.fc .fc-refreshIndicator-button.loading {
+  animation: fc-spin 1s linear infinite;
+}
+
+@keyframes fc-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* FullCalendar: keep month/year truly centered on small screens */
+@media (max-width: 520px) {
+  .fc .fc-toolbar.fc-header-toolbar {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr; /* left | center | right */
+    align-items: center;
+  }
+
+  .fc .fc-toolbar.fc-header-toolbar .fc-toolbar-chunk:nth-child(1) {
+    justify-self: start;
+  }
+
+  .fc .fc-toolbar.fc-header-toolbar .fc-toolbar-chunk:nth-child(2) {
+    justify-self: center; /* <- title stays centered */
+    text-align: center;
+  }
+
+  .fc .fc-toolbar.fc-header-toolbar .fc-toolbar-chunk:nth-child(3) {
+    justify-self: end;
+  }
+
+  .fc .fc-toolbar-title {
+    white-space: nowrap; /* avoid wrapping on narrow screens */
+  }
+}
+
+
+/* Spin animation (shared) */
+@keyframes fc-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Duplicate indicator spin */
+.fc-refresh-anim {
+  animation: fc-spin 1s linear infinite;
+}
+
+/* FullCalendar toolbar button spin while loading */
+.fc .fc-refreshIndicator-button.is-loading {
+  animation: fc-spin 1s linear infinite;
+}
+
