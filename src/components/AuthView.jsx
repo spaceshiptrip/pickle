@@ -1,10 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { authApi } from '../api';
 import logo from '../assets/AthPicklersLogo.png';
+import { setPostLoginRedirect } from '../utils/postLoginRedirect';
+
 
 export default function AuthView({ onLoginSuccess, theme = 'light', onToggleTheme }) {
   const [tab, setTab] = useState('member');
   const [loginId, setLoginId] = useState('');
+  const [mode, setMode] = useState('login'); // 'login' | 'recover'
+  const [recoverEmail, setRecoverEmail] = useState('');
+
 
   const [pin, setPin] = useState('');
   const [email, setEmail] = useState('');
@@ -27,6 +32,7 @@ export default function AuthView({ onLoginSuccess, theme = 'light', onToggleThem
     setError('');
     setMessage('');
     setLoading(false);
+    setMode('login'); // ✅ always return to normal form when switching tabs
   }, [tab]);
 
 
@@ -61,6 +67,29 @@ export default function AuthView({ onLoginSuccess, theme = 'light', onToggleThem
       setLoading(false);
     }
   };
+
+
+  const handleRecoveryRequest = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setMessage('');
+
+    try {
+      // ✅ tell App.jsx where to go after token login
+      setPostLoginRedirect('/settings');
+
+      // ✅ request magic link (name optional / blank is fine)
+      const res = await authApi.requestMagicLink(recoverEmail, '');
+      if (res.ok) setMessage(res.message || 'Check your email for a recovery link.');
+    } catch (err) {
+      setError(err.message || 'Request failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
 
   const isDark = theme === 'dark';
 
@@ -127,94 +156,153 @@ export default function AuthView({ onLoginSuccess, theme = 'light', onToggleThem
           </button>
         </div>
 
-        {/* FORMS */}
-        {tab === 'member' ? (
-          <form onSubmit={handleMemberLogin} className="space-y-6">
-            <div>
-              <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
-               Login 
-              </label>
-              <input
-                type="text"
-                value={loginId}
-                onChange={(e) => setLoginId(e.target.value)}
-                placeholder="8185551234 or name@example.com"
+{/* FORMS */}
+{mode === 'recover' ? (
+  <form onSubmit={handleRecoveryRequest} className="space-y-6">
+    <div>
+      <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
+        Email Address
+      </label>
+      <input
+        type="email"
+        value={recoverEmail}
+        onChange={(e) => setRecoverEmail(e.target.value)}
+        placeholder="name@example.com"
+        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
+                   text-slate-900 dark:text-white placeholder:text-slate-400
+                   focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        required
+      />
+      <p className="mt-2 text-[10px] text-slate-600 dark:text-slate-500">
+        We’ll email you a one-time magic link. After clicking it, you’ll be taken directly to Settings.
+      </p>
+    </div>
 
-                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
-                           text-slate-900 dark:text-white placeholder:text-slate-400
-                           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                required
-              />
-            </div>
+    <button
+      disabled={loading}
+      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl transition disabled:opacity-50"
+    >
+      {loading ? 'Sending…' : 'Send recovery link'}
+    </button>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
-                PIN
-              </label>
-              <input
-                type="password"
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                placeholder="Your secret PIN"
-                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
-                           text-slate-900 dark:text-white placeholder:text-slate-400
-                           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                required
-              />
-            </div>
+    <div className="text-center">
+      <button
+        type="button"
+        onClick={() => {
+          setMode('login');
+          setRecoverEmail('');
+          setError('');
+          setMessage('');
+        }}
+        className="text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:underline"
+      >
+        Back to login
+      </button>
+    </div>
+  </form>
+) : tab === 'member' ? (
+  <form onSubmit={handleMemberLogin} className="space-y-6">
+    <div>
+      <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
+        Login
+      </label>
+      <input
+        type="text"
+        value={loginId}
+        onChange={(e) => setLoginId(e.target.value)}
+        placeholder="8185551234 or name@example.com"
+        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
+                   text-slate-900 dark:text-white placeholder:text-slate-400
+                   focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        required
+      />
+    </div>
 
-            <button
-              disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-xl transition disabled:opacity-50"
-            >
-              {loading ? 'Logging in…' : 'Sign In'}
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handleGuestRequest} className="space-y-6">
-            <div>
-              <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
-                Full Name
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="John Doe"
-                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
-                           text-slate-900 dark:text-white placeholder:text-slate-400
-                           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                required
-              />
-            </div>
+    <div>
+      <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
+        PIN
+      </label>
+      <input
+        type="password"
+        value={pin}
+        onChange={(e) => setPin(e.target.value)}
+        placeholder="Your secret PIN"
+        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
+                   text-slate-900 dark:text-white placeholder:text-slate-400
+                   focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        required
+      />
+    </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="friend@example.com"
-                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
-                           text-slate-900 dark:text-white placeholder:text-slate-400
-                           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                required
-              />
-              <p className="mt-2 text-[10px] text-slate-600 dark:text-slate-500">
-                We’ll email you a one-time magic link.
-              </p>
-            </div>
+    <button
+      disabled={loading}
+      className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-xl transition disabled:opacity-50"
+    >
+      {loading ? 'Logging in…' : 'Sign In'}
+    </button>
 
-            <button
-              disabled={loading}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl transition disabled:opacity-50"
-            >
-              {loading ? 'Sending…' : 'Request Magic Link'}
-            </button>
-          </form>
-        )}
+    <div className="text-center">
+      <button
+        type="button"
+        onClick={() => {
+          setPostLoginRedirect('/settings');
+          setMode('recover');
+          setRecoverEmail('');
+          setError('');
+          setMessage('');
+        }}
+        className="text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:underline"
+      >
+        Forgot PIN / Update Login
+      </button>
+    </div>
+  </form>
+) : (
+  <form onSubmit={handleGuestRequest} className="space-y-6">
+    <div>
+      <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
+        Full Name
+      </label>
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="John Doe"
+        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
+                   text-slate-900 dark:text-white placeholder:text-slate-400
+                   focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        required
+      />
+    </div>
+
+    <div>
+      <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
+        Email Address
+      </label>
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="friend@example.com"
+        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
+                   text-slate-900 dark:text-white placeholder:text-slate-400
+                   focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        required
+      />
+      <p className="mt-2 text-[10px] text-slate-600 dark:text-slate-500">
+        We’ll email you a one-time magic link.
+      </p>
+    </div>
+
+    <button
+      disabled={loading}
+      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl transition disabled:opacity-50"
+    >
+      {loading ? 'Sending…' : 'Request Magic Link'}
+    </button>
+  </form>
+)}
+{/* FORMS END */}
 
         {/* MESSAGES */}
         {message && (
