@@ -8,9 +8,13 @@ import { authApi } from './api';
 import logo from './assets/AthPicklersLogo.png';
 import spaceshiplogo from './assets/SpaceshipTripLogo.png';
 import SettingsView from './components/SettingsView';
+import { popPostLoginRedirect } from './utils/postLoginRedirect';
+
 
 
 const THEME_KEY = 'pickle_theme'; // 'light' | 'dark'
+
+
 
 function getInitialTheme() {
   const saved = localStorage.getItem(THEME_KEY);
@@ -66,18 +70,26 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+
+
   async function initAuth() {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
     const existingSession = localStorage.getItem('pickle_session_id');
 
     try {
+
       if (token) {
         const res = await authApi.consumeToken(token);
         if (res.ok && res.session) {
           localStorage.setItem('pickle_session_id', res.session.sessionId);
           window.history.replaceState({}, document.title, window.location.pathname);
           await loadUser(res.session.sessionId);
+
+          // ✅ NEW: if user came from recovery flow, send them to Settings
+          const post = popPostLoginRedirect();
+          if (post === '/settings') setShowSettings(true);
+
         }
       } else if (existingSession) {
         await loadUser(existingSession);
@@ -99,10 +111,13 @@ export default function App() {
     }
   }
 
-  const onLoginSuccess = (session) => {
-    localStorage.setItem('pickle_session_id', session.sessionId);
-    loadUser(session.sessionId);
-  };
+const onLoginSuccess = async (session) => {
+  localStorage.setItem('pickle_session_id', session.sessionId);
+  await loadUser(session.sessionId);
+
+  const post = popPostLoginRedirect();
+  if (post === '/settings') setShowSettings(true);
+};
 
   const onLogout = async () => {
     const sessionId = localStorage.getItem('pickle_session_id');
