@@ -122,10 +122,10 @@ export default function AuthView({ onLoginSuccess, theme = 'light', onToggleThem
           <form onSubmit={handleMemberLogin} className="space-y-6">
             <div>
               <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
-                Phone Number
+               Login 
               </label>
               <input
-                type="tel"
+                type="text"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="10 digit number"
