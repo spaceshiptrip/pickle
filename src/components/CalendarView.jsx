@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
@@ -6,8 +6,45 @@ import interactionPlugin from '@fullcalendar/interaction';
 import { apiGet } from '../api';
 import { COURT_LAT, COURT_LON, COURT_TIMEZONE } from '../config';
 
+function useIsMobile(breakpointPx = 520) {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= breakpointPx);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= breakpointPx);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [breakpointPx]);
+
+  return isMobile;
+}
+
+function Spinner({ className = "h-4 w-4" }) {
+  return (
+    <svg
+      className={`animate-spin ${className}`}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+        fill="none"
+      />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"
+      />
+    </svg>
+  );
+}
+
+
 function codeToEmoji(code) {
-  // Open-Meteo weathercode quick mapping
   if (code === 0) return '☀️';
   if ([1, 2].includes(code)) return '⛅️';
   if (code === 3) return '☁️';
@@ -23,35 +60,57 @@ function codeToEmoji(code) {
 export default function CalendarView({ onSelectReservation }) {
   const [items, setItems] = useState([]);
   const [key, setKey] = useState(0);
-  const [forecastDays, setForecastDays] = useState(7); // toggle 7 or 16
-  const [weatherByDate, setWeatherByDate] = useState({}); // { 'YYYY-MM-DD': { code, hi, lo, pop } }
+
+  const [forecastDays, setForecastDays] = useState(16);
+  const [showWeather, setShowWeather] = useState(true);
+  const [weatherByDate, setWeatherByDate] = useState({});
+
+  const isMobile = useIsMobile(520);
+  const calRef = useRef(null);
+  const [activeView, setActiveView] = useState('dayGridMonth');
+  const [loading, setLoading] = useState(false);
+
+
+useEffect(() => {
+  (async () => {
+    setLoading(true);
+    try {
+      const data = await apiGet({ action: 'listreservations' });
+      if (data.ok) setItems(data.reservations);
+    } catch (e) {
+      console.error('Failed to load reservations', e);
+    } finally {
+      setLoading(false);
+    }
+  })();
+}, [key]);
+
+useEffect(() => {
+  const btn = document.querySelector('.fc-refreshIndicator-button');
+  if (!btn) return;
+
+  if (loading) btn.classList.add('is-loading');
+  else btn.classList.remove('is-loading');
+}, [loading]);
+
+
 
   useEffect(() => {
+    if (!showWeather) {
+      setWeatherByDate({});
+      return;
+    }
+
     (async () => {
       try {
-        const data = await apiGet({ action: 'listreservations' });
-        if (data.ok) setItems(data.reservations);
-      } catch (e) {
-        console.error("Failed to load reservations", e);
-      }
-    })();
-  }, [key]);
-
-  // ✅ Weather: set your court location here
-  const COURT_LAT = 34.1478;     // <-- replace
-  const COURT_LON = -118.1445;   // <-- replace
-
-  useEffect(() => {
-    (async () => {
-      try {
-const url =
-  `https://api.open-meteo.com/v1/forecast` +
-  `?latitude=${COURT_LAT}` +
-  `&longitude=${COURT_LON}` +
-  `&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max` +
-  `&temperature_unit=fahrenheit` +
-  `&timezone=${COURT_TIMEZONE}` +
-  `&forecast_days=${forecastDays}`;
+        const url =
+          `https://api.open-meteo.com/v1/forecast` +
+          `?latitude=${COURT_LAT}` +
+          `&longitude=${COURT_LON}` +
+          `&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max` +
+          `&temperature_unit=fahrenheit` +
+          `&timezone=${COURT_TIMEZONE}` +
+          `&forecast_days=${forecastDays}`;
 
         const resp = await fetch(url);
         const json = await resp.json();
@@ -64,12 +123,7 @@ const url =
 
         const map = {};
         for (let i = 0; i < time.length; i++) {
-          map[time[i]] = {
-            code: code[i],
-            hi: hi[i],
-            lo: lo[i],
-            pop: pop[i],
-          };
+          map[time[i]] = { code: code[i], hi: hi[i], lo: lo[i], pop: pop[i] };
         }
         setWeatherByDate(map);
       } catch (e) {
@@ -77,13 +131,13 @@ const url =
         setWeatherByDate({});
       }
     })();
-  }, [forecastDays, COURT_LAT, COURT_LON]);
+  }, [showWeather, forecastDays]);
 
   const today = new Date().toISOString().slice(0, 10);
 
   const events = useMemo(
     () =>
-      items.map(it => {
+      items.map((it) => {
         const start = `${it.Date}T${it.Start}:00`;
         const end = `${it.Date}T${it.End}:00`;
         const isProposed = it.Status === 'proposed';
@@ -103,66 +157,161 @@ const url =
     [items, today]
   );
 
+  const iconBtn =
+    'inline-flex items-center justify-center h-8 w-8 rounded-md border border-gray-300 dark:border-gray-700 ' +
+    'bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 ' +
+    'text-gray-800 dark:text-gray-100';
+
+  const mobileViewBtn = (view, icon, label) => {
+    const isActive = activeView === view;
+    const cls =
+      'inline-flex items-center justify-center h-8 w-8 rounded-md border ' +
+      (isActive
+        ? 'border-gray-900 dark:border-gray-100 bg-gray-100 dark:bg-gray-800'
+        : 'border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800') +
+      ' text-gray-800 dark:text-gray-100';
+
+    return (
+      <button
+        key={view}
+        type="button"
+        className={cls}
+        onClick={() => {
+          const api = calRef.current?.getApi?.();
+          if (!api) return;
+          api.changeView(view);
+          setActiveView(view);
+        }}
+        title={label}
+        aria-label={label}
+      >
+        <span style={{ fontSize: 16, lineHeight: 1 }}>{icon}</span>
+      </button>
+    );
+  };
+
   return (
     <div className="mb-6">
-      <div className="flex items-center gap-3 mb-2">
-        <button
-          className="text-sm underline"
-          onClick={() => setForecastDays(d => (d === 7 ? 16 : 7))}
-          title="Toggle forecast range"
-        >
-          Weather: next {forecastDays} days (click to toggle)
-        </button>
+      <div className="flex items-center justify-between mb-2">
+        {/* left side: your existing small icon controls */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className={iconBtn}
+            onClick={() => setShowWeather((v) => !v)}
+            title={showWeather ? 'Hide weather' : 'Show weather'}
+            aria-label={showWeather ? 'Hide weather' : 'Show weather'}
+          >
+            {showWeather ? '☀️' : '☁️'}
+          </button>
 
-        <button
-          className="text-sm underline"
-          onClick={() => setKey(k => k + 1)}
-        >
-          Refresh
-        </button>
+          <button
+            type="button"
+            className={iconBtn}
+            onClick={() => setForecastDays((d) => (d === 7 ? 16 : 7))}
+            title={`Forecast range: ${forecastDays} days (click to toggle)`}
+            aria-label={`Forecast range: ${forecastDays} days (click to toggle)`}
+            disabled={!showWeather}
+          >
+            {forecastDays === 16 ? '16' : '7'}
+          </button>
+
+    {/* ⭐ OPTIONAL separate indicator */}
+    {loading && (
+      <div
+        className="inline-flex items-center"
+        title="Loading calendar…"
+        aria-label="Loading calendar…"
+      >
+        <Spinner />
       </div>
+    )}
 
-      <FullCalendar
-        key={key}
-        plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-        initialView="dayGridMonth"
-        headerToolbar={{
-          left: 'prev,next today',
-          center: 'title',
-          right: 'dayGridMonth,timeGridWeek,timeGridDay',
-        }}
-        dayCellClassNames={(arg) => (arg.isToday ? ['fc-day-today-custom'] : [])}
 
-        // ✅ Render weather inside each day cell (month/week/day)
-        dayCellContent={(arg) => {
-          const dateStr = arg.date.toISOString().slice(0, 10);
-          const w = weatherByDate[dateStr];
-          const dayNumber = arg.dayNumberText; // e.g., "9"
-          if (!w) return dayNumber;
+        </div>
 
-          const emoji = codeToEmoji(w.code);
-          const hi = Math.round(w.hi);
-          const lo = Math.round(w.lo);
+        {/* right side: mobile view switcher icons */}
+        {isMobile && (
+          <div className="flex items-center gap-2">
+            {mobileViewBtn('dayGridMonth', '📅', 'Month')}
+            {mobileViewBtn('timeGridWeek', '🗓️', 'Week')}
+            {mobileViewBtn('timeGridDay', '⏱️', 'Day')}
+          </div>
+        )}
+      </div>
+{/* Dim + disable calendar interactions while loading */}
+<div className={loading ? "opacity-60 pointer-events-none" : ""}>
+  <FullCalendar
+    ref={calRef}
+    key={key}
+    plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+    initialView={activeView}
 
-          // Keep it compact: "9" + "☀️ 72/55"
-          return (
-            <div style={{ lineHeight: 1.1 }}>
-              <div>{dayNumber}</div>
-              <div className="fc-weather-mini" title={`High ${hi}° / Low ${lo}° · Rain ${w.pop ?? 0}%`}>
-                {emoji} {hi}/{lo}
-              </div>
-            </div>
-          );
-        }}
+    // ✅ Add a toolbar button right next to "today"
+customButtons={{
+  refreshIndicator: {
+    text: '↻',
+    click: () => {
+      if (!loading) setKey(k => k + 1);
+    },
+  },
+}}
 
-        events={events}
-        eventClick={(info) => onSelectReservation(info.event.extendedProps)}
-        height="auto"
-        nowIndicator
-        allDaySlot={false}
-        slotMinTime="06:00:00"
-        slotMaxTime="23:00:00"
-      />
+    headerToolbar={
+      isMobile
+        ? {
+            left: 'prev,next today refreshIndicator',
+            center: 'title',
+            right: '', // hide big Month/Week/Day buttons on mobile
+          }
+        : {
+            left: 'prev,next today refreshIndicator',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay',
+          }
+    }
+
+    // keep activeView in sync if user changes view some other way
+    datesSet={(arg) => setActiveView(arg.view.type)}
+    titleFormat={isMobile ? { year: 'numeric', month: 'short' } : undefined}
+    dayCellClassNames={(arg) => (arg.isToday ? ['fc-day-today-custom'] : [])}
+
+    dayCellContent={(arg) => {
+      const dayNumber = arg.dayNumberText;
+      if (!showWeather) return dayNumber;
+
+      const dateStr = arg.date.toISOString().slice(0, 10);
+      const w = weatherByDate[dateStr];
+      if (!w) return dayNumber;
+
+      const emoji = codeToEmoji(w.code);
+      const hi = Math.round(w.hi);
+      const lo = Math.round(w.lo);
+
+      return (
+        <div style={{ lineHeight: 1.1 }}>
+          <div>{dayNumber}</div>
+          <div
+            className="fc-weather-mini"
+            title={`High ${hi}° / Low ${lo}° · Rain ${w.pop ?? 0}%`}
+          >
+            {emoji} {hi}/{lo}
+          </div>
+        </div>
+      );
+    }}
+
+    events={events}
+    eventClick={(info) => onSelectReservation(info.event.extendedProps)}
+    height="auto"
+    nowIndicator
+    allDaySlot={false}
+    slotMinTime="06:00:00"
+    slotMaxTime="23:00:00"
+  />
+</div>
+
     </div>
   );
 }
+
