@@ -168,7 +168,7 @@ function roleRank_(role) {
 }
 
 function visibilityRank_(vis) {
-  vis = String(vis || 'guest').toLowerCase();
+  vis = String(vis || 'member').toLowerCase();
   if (vis === 'admin') return 4;
   if (vis === 'memberplus') return 3;
   if (vis === 'member') return 2;
@@ -376,7 +376,7 @@ function listReservations(ctx) {
       Capacity: Number(r[rIdx['Capacity']]) || 0,
       BaseFee: Number(r[rIdx['BaseFee']]) || 0,
       Status: String(r[rIdx['Status']] || 'reserved').toLowerCase().trim(),
-      Visibility: hasVisibility ? String(r[rIdx['Visibility']] || 'guest').toLowerCase().trim() : 'guest',
+      Visibility: hasVisibility ? normalizeVisibility_(r[rIdx['Visibility']]) : 'member',
       VisibleToUserIds: hasAllow ? String(r[rIdx['VisibleToUserIds']] || '').trim() : '',
       Fees: feesByRes[id] || []
     };
@@ -647,7 +647,7 @@ function upsertReservation_(payload) {
   var sh = sheetByName(RESERVATIONS_SHEET_NAME);
 
   var status = String(payload.Status || 'reserved').toLowerCase().trim();
-  var visibility = String(payload.Visibility || 'guest').toLowerCase().trim();
+  var visibility = normalizeVisibility_(payload.Visibility);
 
   var row = {
     'Id': payload.Id || nextReservationId_(),
@@ -1158,6 +1158,13 @@ function deleteSession_(sessionId) {
   return false;
 }
 
+function normalizeVisibility_(v) {
+  v = String(v || 'member').toLowerCase().trim();
+  if (v === 'admin' || v === 'memberplus' || v === 'member' || v === 'guest') return v;
+  return 'member';
+}
+
+
 /** -------- Email sending -------- */
 function sendMagicLinkEmail_(toEmail, token) {
   // Option A (recommended): link goes to your site and your frontend calls auth.consumeToken
@@ -1220,16 +1227,14 @@ function round2_(n){ return Math.round((Number(n)||0)*100)/100; }
 /** ---- Setup note (one-time) ----
 Create these headers exactly:
 
-Reservations:  Id | Date | Start | End | Court | Capacity | BaseFee
-Attendance:    Date | Hours | Player Name | Present (1/0) | Charge (auto) | PAID | ReservationId
+Reservations:  Id | Date | Start | End | Court | Capacity | BaseFee | Status | Visibility | VisibleToUserIds
+Attendance: Date | Hours | Player Name | UserId | Present (1/0) | Charge (auto) | PAID | ReservationId
 Fees:          ReservationId | FeeName | Amount
-
-NEW:
 Users:         UserId | Role | Name | Phone | Email | Venmo | PinHash | Active
 AuthTokens:    Token | UserId | ExpiresAt | Used | CreatedAt
 Sessions:      SessionId | UserId | Role | CreatedAt | ExpiresAt | Revoked
 
-Role values: admin | member | guest
+Role values: admin | memberplus | member | guest
 Active: 1 or 0
 
 PIN hashing:
