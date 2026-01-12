@@ -1151,11 +1151,17 @@ function approveGuest_(payload) {
 
   var newUser = {};
   ut.header.forEach(function(h) { newUser[h] = ''; });
-  newUser['UserId'] = maxId + 1;
+  newUser['UserId'] = String(maxId + 1);
   newUser['Role'] = 'guest';
   newUser['Name'] = name;
   newUser['Email'] = email;
+
+  var h = hashLoginId_(email);
+  if (!h) return { ok:false, error:'invalid_email' };
+  newUser['LoginHash'] = h;
+
   newUser['Active'] = 1;
+
 
   ush.appendRow(ut.header.map(function(h) { return newUser[h]; }));
 
