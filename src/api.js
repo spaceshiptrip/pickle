@@ -51,3 +51,11 @@ export const authApi = {
   logout: (sessionId) => apiPost('auth.logout', { sessionId }),
   whoAmI: (sessionId) => apiPost('auth.whoami', { sessionId }),
 };
+
+
+export const settingsApi = {
+  updateLogin: (newLogin) => apiPost('auth.updatelogin', { newLogin }),
+  updatePin: (oldPin, newPin) => apiPost('auth.updatepin', { oldPin, newPin }),
+};
+
+
