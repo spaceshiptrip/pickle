@@ -151,7 +151,13 @@ function requireAuth_(e, payload) {
   var user = findUserById_(sess.UserId);
   if (!user || !user.Active) throw new Error('invalid_user');
 
-  return { sessionId: sid, user: user, role: user.Role, userId: String(user.UserId) };
+  return {
+    sessionId: sid,
+    user: user,
+    role: String(user.Role || 'guest').toLowerCase().trim(),
+    userId: String(user.UserId).trim()
+  };
+
 }
 
 function requireRole_(ctx, allowed) {
@@ -218,6 +224,17 @@ function reservationStatusMap_() {
 }
 
 
+function parseLocalDateTime_(dateStr, timeStr) {
+  var parts = String(dateStr).split('-'); // yyyy-mm-dd
+  var t = String(timeStr).split(':');     // HH:mm
+  return new Date(
+    Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]),
+    Number(t[0]), Number(t[1] || 0), 0, 0
+  );
+}
+
+
+
 function parseBody_(e) {
   try {
     if (!e || !e.postData || !e.postData.contents) return {};
@@ -246,7 +263,9 @@ function sheetByName(name) {
 
 function headerIndexMap_(rowValues) {
   var map = {};
-  for (var i = 0; i < rowValues.length; i++) map[String(rowValues[i])] = i;
+  for (var i = 0; i < rowValues.length; i++) {
+    map[String(rowValues[i]).trim()] = i;
+  }
   return map;
 }
 
@@ -332,6 +351,18 @@ function nextReservationId_() {
 }
 
 /** -------- API impl (existing) -------- */
+function isAllowlistedForAny_(ctx, items) {
+  var uid = (ctx && ctx.userId) ? String(ctx.userId) : '';
+  if (!uid) return false;
+
+  return (items || []).some(function(it){
+    var allow = parseUserIdCsv_(it && it.VisibleToUserIds);
+    return allow.indexOf(uid) !== -1;
+  });
+}
+
+
+
 function listReservations(ctx) {
   var userRole = String((ctx && ctx.role) || 'guest').toLowerCase();
 
@@ -386,17 +417,21 @@ function listReservations(ctx) {
   items = items.filter(function(it){ return canSeeReservation_(ctx, it); });
 
   // Keep your current restriction: members/guests only see the next upcoming allowed event
-  if (userRole === 'member' || userRole === 'guest') {
+  // BUT: if they are explicitly allowlisted on any event, allow full visibility of allowed items.
+  var allowlisted = isAllowlistedForAny_(ctx, items);
+  
+  if ((userRole === 'member' || userRole === 'guest') && !allowlisted) {
     var now = new Date();
     items.sort(function(a, b) {
       return a.Date.localeCompare(b.Date) || a.Start.localeCompare(b.Start);
     });
 
     var nextEvent = items.find(function(item) {
-      var eventStart = new Date(item.Date + 'T' + item.Start + ':00');
+      var eventStart = parseLocalDateTime_(item.Date, item.Start);
+
       return eventStart >= now;
     });
-
+  
     items = nextEvent ? [nextEvent] : [];
   }
 
@@ -621,21 +656,26 @@ function markPaid_(payload) {
     return { ok: true };
   }
 
-  // 🔁 Backward-compatible fallback: old behavior by reservationId + player
+  // 🔁 Backward-compatible fallback (ONLY if unambiguous)
   if (!payload.reservationId || !payload.player) return { ok: false, error: 'bad_request' };
 
+  var matches = [];
   for (var i = 0; i < at.rows.length; i++) {
     var r = at.rows[i];
     if (
       String(r[idx['ReservationId']]) === String(payload.reservationId) &&
-      String(r[idx['Player Name']]).trim().toLowerCase() === String(payload.player).trim().toLowerCase()
+      String(r[idx['Player Name']]).trim().toLowerCase() === String(payload.player).trim().toLowerCase() &&
+      (idx['Present (1/0)'] === undefined || Number(r[idx['Present (1/0)']]) !== 0) // only active rows
     ) {
-      sh.getRange(i + 2, idx['PAID'] + 1).setValue(payload.paid ? 1 : 0);
-      return { ok: true };
+      matches.push(i);
     }
   }
 
-  return { ok: false, error: 'player_not_found' };
+  if (matches.length === 0) return { ok: false, error: 'player_not_found' };
+  if (matches.length > 1) return { ok: false, error: 'ambiguous_match_use_sheetrow' };
+
+  sh.getRange(matches[0] + 2, idx['PAID'] + 1).setValue(payload.paid ? 1 : 0);
+  return { ok: true };
 }
 
 
@@ -727,7 +767,9 @@ function auth_loginWithPin_(payload) {
   var user = findUserByPhone_(phone);
   if (!user || !user.Active) return { ok: false, error: 'invalid_login' };
   var role = String(user.Role || '').toLowerCase();
-  if (role !== 'admin' && role !== 'memberplus' && role !== 'member') return { ok: false, error: 'invalid_login' };
+
+  if (role !== 'admin' && role !== 'memberplus' && role !== 'member' && role !== 'guest')
+    return { ok: false, error: 'invalid_login' };
 
   if (!verifyPin_(pin, user.PinHash)) return { ok: false, error: 'invalid_login' };
 
@@ -742,7 +784,7 @@ function auth_requestMagicLink_(payload) {
   var user = findUserByEmail_(email);
 
   // 1. Approved Guest: Send a new fresh link
-  if (user && user.Active && user.Role === 'guest') {
+  if (user && user.Active && String(user.Role).toLowerCase().trim() === 'guest') {
     var token = createAuthToken_(user.UserId, MAGIC_LINK_TTL_MIN);
     sendMagicLinkEmail_(email, token);
     return { ok: true, message: 'Welcome back! You are already approved. A new magic link has been sent to your email.' };
@@ -788,7 +830,17 @@ function auth_whoami_(payload) {
   if (!user || !user.Active) return { ok: true, user: null };
 
   // minimal user payload
-  return { ok: true, user: { userId: user.UserId, role: user.Role, name: user.Name, phone: user.Phone, email: user.Email } };
+  return {
+    ok: true,
+    user: {
+      userId: user.UserId,
+      role: String(user.Role || 'guest').toLowerCase().trim(),
+      name: user.Name,
+      phone: user.Phone,
+      email: user.Email
+    }
+  };
+
 }
 
 function auth_logout_(payload) {
