@@ -31,7 +31,7 @@ function doGet(e) {
     var ctx = requireAuth_(e, null);
     // allow all roles
     requireRole_(ctx, ['admin', 'memberplus', 'member', 'guest']);
-    return json_(listReservations(ctx.role));
+    return json_(listReservations(ctx));
   }
 
   if (action === 'listattendance') {
@@ -159,6 +159,63 @@ function requireRole_(ctx, allowed) {
   if (allowed.indexOf(ctx.role) === -1) throw new Error('forbidden');
 }
 
+function roleRank_(role) {
+  role = String(role || 'guest').toLowerCase();
+  if (role === 'admin') return 4;
+  if (role === 'memberplus') return 3;
+  if (role === 'member') return 2;
+  return 1; // guest
+}
+
+function visibilityRank_(vis) {
+  vis = String(vis || 'guest').toLowerCase();
+  if (vis === 'admin') return 4;
+  if (vis === 'memberplus') return 3;
+  if (vis === 'member') return 2;
+  return 1; // guest
+}
+
+function parseUserIdCsv_(s) {
+  return String(s || '')
+    .split(',')
+    .map(function(x){ return String(x).trim(); })
+    .filter(Boolean);
+}
+
+function canSeeReservation_(ctx, resObj) {
+  // Admin sees all
+  if (ctx && String(ctx.role).toLowerCase() === 'admin') return true;
+
+  var userRank = roleRank_(ctx && ctx.role);
+  var reqRank = visibilityRank_(resObj && resObj.Visibility);
+
+  // role-based visibility
+  if (userRank >= reqRank) return true;
+
+  // allowlist visibility (optional)
+  var uid = (ctx && ctx.userId) ? String(ctx.userId) : '';
+  if (!uid) return false;
+
+  var allow = parseUserIdCsv_(resObj && resObj.VisibleToUserIds);
+  return allow.indexOf(uid) !== -1;
+}
+
+
+function reservationStatusMap_() {
+  var rt = readTable_(sheetByName(RESERVATIONS_SHEET_NAME));
+  var idx = headerIndexMap_(rt.header);
+  var out = {};
+  if (idx['Id'] === undefined) return out;
+
+  var statusCol = idx['Status'];
+  for (var i=0;i<rt.rows.length;i++){
+    var r = rt.rows[i];
+    var id = String(r[idx['Id']]);
+    var st = (statusCol !== undefined) ? String(r[statusCol] || '').toLowerCase().trim() : '';
+    out[id] = st || 'reserved';
+  }
+  return out;
+}
 
 
 function parseBody_(e) {
@@ -275,14 +332,18 @@ function nextReservationId_() {
 }
 
 /** -------- API impl (existing) -------- */
-function listReservations(userRole) {
-  userRole = String(userRole || 'guest').toLowerCase();
+function listReservations(ctx) {
+  var userRole = String((ctx && ctx.role) || 'guest').toLowerCase();
+
   var rs = sheetByName(RESERVATIONS_SHEET_NAME);
   var fs = sheetByName(FEES_SHEET_NAME);
   var rt = readTable_(rs);
   var ft = readTable_(fs);
   var rIdx = headerIndexMap_(rt.header);
   var fIdx = headerIndexMap_(ft.header);
+
+  var hasVisibility = (rIdx['Visibility'] !== undefined);
+  var hasAllow = (rIdx['VisibleToUserIds'] !== undefined);
 
   var feesByRes = {};
   for (var j=0;j<ft.rows.length;j++){
@@ -315,14 +376,18 @@ function listReservations(userRole) {
       Capacity: Number(r[rIdx['Capacity']]) || 0,
       BaseFee: Number(r[rIdx['BaseFee']]) || 0,
       Status: String(r[rIdx['Status']] || 'reserved').toLowerCase().trim(),
+      Visibility: hasVisibility ? String(r[rIdx['Visibility']] || 'guest').toLowerCase().trim() : 'guest',
+      VisibleToUserIds: hasAllow ? String(r[rIdx['VisibleToUserIds']] || '').trim() : '',
       Fees: feesByRes[id] || []
     };
   });
 
-  // Filter for restricted roles
+  // NEW: apply visibility filter
+  items = items.filter(function(it){ return canSeeReservation_(ctx, it); });
+
+  // Keep your current restriction: members/guests only see the next upcoming allowed event
   if (userRole === 'member' || userRole === 'guest') {
     var now = new Date();
-    // Sort items by date and start time to find the "next" one
     items.sort(function(a, b) {
       return a.Date.localeCompare(b.Date) || a.Start.localeCompare(b.Start);
     });
@@ -338,6 +403,7 @@ function listReservations(userRole) {
   return { ok: true, reservations: items };
 }
 
+
 function listAttendance_(e, ctx) {
 
   var resId = (e && e.parameter && e.parameter.reservationId) ? String(e.parameter.reservationId) : '';
@@ -349,6 +415,9 @@ function listAttendance_(e, ctx) {
 
   var idx = headerIndexMap_(at.header);
   var isAdmin = (ctx && ctx.role === 'admin');
+
+  var resStatus = reservationStatusMap_();
+
   var hasUserIdCol = (idx['UserId'] !== undefined);
   var currentUserId = (ctx && ctx.userId) ? String(ctx.userId) : '';
 
@@ -368,6 +437,14 @@ function listAttendance_(e, ctx) {
         : String(d).substring(0, 7);
       if (ds !== month) continue;
     }
+
+
+    // NEW: skip attendance for cancelled reservations
+    if (idx['ReservationId'] !== undefined) {
+      var rid = String(r[idx['ReservationId']] || '');
+      if (rid && resStatus[rid] === 'cancelled') continue;
+    }
+
 
 
     // Skip cancelled rows (robust: handles 0, "0", false, "")
@@ -568,6 +645,10 @@ function markPaid_(payload) {
  */
 function upsertReservation_(payload) {
   var sh = sheetByName(RESERVATIONS_SHEET_NAME);
+
+  var status = String(payload.Status || 'reserved').toLowerCase().trim();
+  var visibility = String(payload.Visibility || 'guest').toLowerCase().trim();
+
   var row = {
     'Id': payload.Id || nextReservationId_(),
     'Date': payload.Date,
@@ -576,11 +657,15 @@ function upsertReservation_(payload) {
     'Court': payload.Court,
     'Capacity': payload.Capacity,
     'BaseFee': payload.BaseFee,
-    'Status': payload.Status || 'reserved'
+    'Status': status,
+    'Visibility': visibility,
+    'VisibleToUserIds': String(payload.VisibleToUserIds || '').trim()
   };
+
   upsertRowById_(sh, 'Id', row);
   return { ok: true, reservation: row };
 }
+
 
 function addFee_(payload) {
   var sh = sheetByName(FEES_SHEET_NAME);

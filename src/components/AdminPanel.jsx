@@ -10,14 +10,16 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
     // Form state for Proposed Dates (Issue #31)
     const [reservations, setReservations] = useState([]);
     const [form, setForm] = useState({
-        Id: '',
-        Date: '',
-        Start: '',
-        End: '',
-        Court: 'North',
-        Capacity: 8,
-        BaseFee: 5,
-        Status: 'reserved'
+      Id: '',
+      Date: '',
+      Start: '',
+      End: '',
+      Court: 'North',
+      Capacity: 8,
+      BaseFee: 5,
+      Status: 'reserved',
+      Visibility: 'member',            // NEW
+      VisibleToUserIds: ''            // NEW (optional allowlist)
     });
 
     // For "Other" court text entry (kept separate so we can still store final value in form.Court)
@@ -35,6 +37,8 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
     const [approvals, setApprovals] = useState([]);
     const [approvalsLoading, setApprovalsLoading] = useState(false);
     const [approvalsError, setApprovalsError] = useState('');
+
+    const [preCancelStatus, setPreCancelStatus] = useState(null);
 
     // Shared UI classes (light + dark)
     const panelWrapClass =
@@ -72,7 +76,9 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                 Court: editReservation.Court,
                 Capacity: editReservation.Capacity || 8,
                 BaseFee: editReservation.BaseFee || 5,
-                Status: editReservation.Status || 'reserved'
+                Status: editReservation.Status || 'reserved',
+                Visibility: editReservation.Visibility || 'member',
+                VisibleToUserIds: editReservation.VisibleToUserIds || ''
             });
             // Scroll to the admin panel form
             document.getElementById('admin-reservation-form')?.scrollIntoView({ behavior: 'smooth' });
@@ -152,7 +158,19 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
         try {
             const r = await apiPost('upsertreservation', payload);
             if (r.ok) {
-                setForm({ Date: '', Start: '', End: '', Court: 'North', Capacity: 8, BaseFee: 5, Status: 'reserved' });
+                setForm({
+                  Id: '',
+                  Date: '',
+                  Start: '',
+                  End: '',
+                  Court: 'North',
+                  Capacity: 8,
+                  BaseFee: 5,
+                  Status: 'reserved',
+                  Visibility: 'member',
+                  VisibleToUserIds: ''
+                });
+
                 setCourtOther('');
                 load();
                 if (onSaveSuccess) onSaveSuccess();
@@ -310,23 +328,89 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                                     />
                                 </div>
 
+
+<div className="col-span-2">
+  <label className={labelClass}>Visibility</label>
+  <select
+    className={selectClass}
+    value={form.Visibility || 'member'}
+    onChange={(e) => setForm({ ...form, Visibility: e.target.value })}
+  >
+    <option value="admin">Admin only</option>
+    <option value="memberplus">MemberPLUS + Admin</option>
+    <option value="member">Members + MemberPLUS + Admin</option>
+    <option value="guest">Guests + Everyone</option>
+  </select>
+
+  <div className="mt-2">
+    <label className={labelClass}>
+      Allow specific users (optional) — comma-separated UserIds
+    </label>
+    <input
+      className={inputClass}
+      placeholder="Example: 3,8,10"
+      value={form.VisibleToUserIds || ''}
+      onChange={(e) => setForm({ ...form, VisibleToUserIds: e.target.value })}
+    />
+    <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+      If someone’s role is too low, they can still see this event if their UserId is listed here.
+    </div>
+  </div>
+</div>
+
+
                                 <div className="col-span-2">
                                     <label className={labelClass}>Status</label>
                                     <select
                                         className={`border rounded px-2 py-1 w-full font-bold border-slate-300
-                                            dark:border-slate-600 dark:bg-slate-900
-                                            ${
-                                                form.Status === 'proposed'
-                                                    ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
-                                                    : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
-                                            }`}
+                                          dark:border-slate-600 dark:bg-slate-900
+                                          ${
+                                            form.Status === 'cancelled'
+                                              ? 'bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
+                                              : form.Status === 'proposed'
+                                                ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
+                                                : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+                                          }`}
+
                                         value={form.Status}
                                         onChange={(e) => setForm({ ...form, Status: e.target.value })}
                                     >
                                         <option value="reserved">✅ RESERVED (Confirmed)</option>
                                         <option value="proposed">⏳ PROPOSED (Draft)</option>
+                                        <option value="cancelled">🚫 CANCELLED</option>
+
                                     </select>
                                 </div>
+
+<div className="col-span-2">
+  <button
+    type="button"
+    className={`w-full border rounded px-3 py-2 font-extrabold tracking-wide transition-colors ${
+      form.Status === 'cancelled'
+        ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+        : 'bg-rose-600 text-white hover:bg-rose-700'
+    }`}
+    onClick={() => {
+      if (form.Status === 'cancelled') {
+        setForm({ ...form, Status: preCancelStatus || 'reserved' });
+        setPreCancelStatus(null);
+      } else {
+        setPreCancelStatus(form.Status);
+        setForm({ ...form, Status: 'cancelled' });
+      }
+    }}
+
+  >
+    {form.Status === 'cancelled' ? 'RESUME' : 'CANCEL'}
+  </button>
+
+  {form.Status === 'cancelled' && (
+    <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+      Cancelled sessions are excluded from reports/charges.
+    </div>
+  )}
+</div>
+
                             </>
                         )}
                     </div>
