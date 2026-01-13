@@ -263,27 +263,32 @@ useEffect(() => {
 
   const today = new Date().toISOString().slice(0, 10);
 
-  const events = useMemo(
-    () =>
-      items.map((it) => {
-        const start = `${it.Date}T${it.Start}:00`;
-        const end = `${it.Date}T${it.End}:00`;
-        const isProposed = it.Status === 'proposed';
-        const isToday = it.Date === today;
+const events = useMemo(
+  () =>
+    items.map((it) => {
+      const start = `${it.Date}T${it.Start}:00`;
+      const end = `${it.Date}T${it.End}:00`;
+      const status = String(it.Status || '').toLowerCase();
+      const isProposed = status === 'proposed';
+      const isCancelled = status === 'cancelled' || status === 'canceled';
+      const isToday = it.Date === today;
 
-        return {
-          id: it.Id,
-          title: isProposed ? `PROPOSED · ${it.Start}` : `Court ${it.Court} · $${it.BaseFee}`,
-          start,
-          end,
-          extendedProps: it,
-          classNames: isToday ? ['fc-event-today'] : [],
-          backgroundColor: isProposed ? '#eab308' : '#1e3a8a',
-          borderColor: isProposed ? '#854d0e' : '#1e3a8a',
-        };
-      }),
-    [items, today]
-  );
+      return {
+        id: it.Id,
+        title: isProposed ? `PROPOSED · ${it.Start}` : `Court ${it.Court} · $${it.BaseFee}`,
+        start,
+        end,
+        extendedProps: it,
+        classNames: [
+          ...(isToday ? ['fc-event-today'] : []),
+          ...(isCancelled ? ['fc-event-cancelled'] : []),
+        ],
+        backgroundColor: isProposed ? '#eab308' : '#1e3a8a',
+        borderColor: isProposed ? '#854d0e' : '#1e3a8a',
+      };
+    }),
+  [items, today]
+);
 
   const iconBtn =
     'inline-flex items-center justify-center h-8 w-8 rounded-md border border-gray-300 dark:border-gray-700 ' +
@@ -452,6 +457,21 @@ customButtons={{
     },
   },
 }}
+
+eventContent={(arg) => {
+  const status = String(arg.event.extendedProps?.Status || '').toLowerCase();
+  const isCancelled = status === 'cancelled' || status === 'canceled';
+
+  return (
+    <div className="fc-event-content-wrap">
+      {isCancelled ? <span className="fc-cancel-dot" aria-hidden="true" /> : null}
+      <span className={isCancelled ? 'fc-cancel-text' : ''}>
+        {arg.event.title}
+      </span>
+    </div>
+  );
+}}
+
 
     headerToolbar={
       isMobile

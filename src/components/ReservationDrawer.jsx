@@ -45,8 +45,12 @@ export default function ReservationDrawer({ reservation, onClose, role, user, on
   const [total, setTotal] = useState('');
   const [markPaid, setMarkPaid] = useState(false);
 
-  const isAdmin = role?.toLowerCase() === 'admin';
-  const isProposed = reservation.Status === 'proposed';
+const isAdmin = role?.toLowerCase() === 'admin';
+
+const status = String(reservation?.Status || '').toLowerCase();
+const isProposed = status === 'proposed';
+const isCanceled = status === 'cancelled' || status === 'canceled';
+
 
   // Local event start Date (avoid "Z" so it stays local time)
   const eventStart = useMemo(() => {
@@ -413,9 +417,11 @@ async function setPaid(sheetRow, paid) {
     ? 'bg-amber-50 border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/30'
     : 'bg-white border-slate-200 dark:bg-slate-800 dark:border-slate-700';
 
-  const headerClass = isProposed
-    ? 'bg-amber-100 border-amber-200 dark:bg-amber-500/15 dark:border-amber-500/30'
-    : 'bg-white dark:bg-slate-900 dark:border-slate-700';
+const headerClass = isCanceled
+  ? 'bg-rose-50 border-rose-200 dark:bg-rose-500/10 dark:border-rose-500/30'
+    : isProposed
+	    ? 'bg-amber-100 border-amber-200 dark:bg-amber-500/15 dark:border-amber-500/30'
+		    : 'bg-white dark:bg-slate-900 dark:border-slate-700';
 
   const panelClass =
     'border rounded p-3 bg-white dark:bg-slate-900/40 dark:border-slate-700';
@@ -454,25 +460,35 @@ async function setPaid(sheetRow, paid) {
     {/* LEFT: title/date gets full width on mobile */}
     <div className="min-w-0 w-full sm:flex-1">
       <div className="flex items-center gap-2 min-w-0">
-        {isProposed && (
-          <span className="shrink-0 bg-amber-500 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-tighter">
-            Proposed
-          </span>
-        )}
+
+{isProposed && (
+  <span className="shrink-0 bg-amber-500 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-tighter">
+    Proposed
+  </span>
+)}
+
+{isCanceled && (
+  <span className="shrink-0 bg-rose-600 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-tighter">
+    CANCELED
+  </span>
+)}
+
 
         {/* Title: single line on mobile, up to 2 on sm+ */}
         <div
-          className="
-            min-w-0 flex-1
-            text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100
-            leading-tight
-            truncate
-            sm:whitespace-normal
-            sm:[display:-webkit-box]
-            sm:[-webkit-box-orient:vertical]
-            sm:overflow-hidden
-            sm:[-webkit-line-clamp:2]
-          "
+className={`
+  min-w-0 flex-1
+  text-base sm:text-lg font-semibold
+  ${isCanceled ? 'text-rose-700 dark:text-rose-300' : 'text-slate-900 dark:text-slate-100'}
+  leading-tight
+  truncate
+  sm:whitespace-normal
+  sm:[display:-webkit-box]
+  sm:[-webkit-box-orient:vertical]
+  sm:overflow-hidden
+  sm:[-webkit-line-clamp:2]
+`}
+
           title={`Court ${reservation.Court}`}
         >
           {`Court ${reservation.Court}`}
@@ -483,6 +499,12 @@ async function setPaid(sheetRow, paid) {
         {formatDateMmmDdYyyy(reservation.Date)} ·{' '}
         {formatTimeAmPm(reservation.Start)} – {formatTimeAmPm(reservation.End)}
       </div>
+{isCanceled && (
+  <div className="mt-2 text-sm font-semibold text-rose-700 dark:text-rose-300">
+    This reservation has been canceled.
+  </div>
+)}
+
     </div>
 
     {/* RIGHT: buttons become row 2 on mobile, wrap nicely */}
