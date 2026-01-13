@@ -3,7 +3,6 @@
 /* Enable class-based dark mode (your App.jsx toggles .dark on <html>) */
 @custom-variant dark (&:where(.dark, .dark *));
 
-
 /* Highlight today's calendar column */
 .fc-day-today-custom {
   background-color: rgba(59, 130, 246, 0.08); /* blue */
@@ -14,3 +13,184 @@
   box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.9); /* green ring */
   font-weight: 600;
 }
+
+/* Fix month-view event text spilling across day cells on small screens */
+.fc .fc-daygrid-day-frame,
+.fc .fc-daygrid-day-events {
+  overflow: hidden !important;
+}
+
+.fc .fc-daygrid-event,
+.fc .fc-daygrid-event .fc-event-main {
+  max-width: 100% !important;
+  overflow: hidden !important;
+}
+
+.fc .fc-daygrid-event .fc-event-title,
+.fc .fc-daygrid-event .fc-event-time {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+
+/* ================================
+   Fix WEEK/DAY (timeGrid) overflow
+   ================================ */
+
+/* Hard-clip anything that tries to bleed outside its column */
+.fc .fc-timegrid-event,
+.fc .fc-timegrid-event .fc-event-main,
+.fc .fc-timegrid-event .fc-event-main-frame {
+  max-width: 100% !important;
+  overflow: hidden !important;
+}
+
+/* Make inner content shrink instead of pushing outside the cell */
+.fc .fc-timegrid-event .fc-event-main-frame {
+  min-width: 0 !important;
+}
+
+/* Prevent long titles from expanding horizontally */
+.fc .fc-timegrid-event .fc-event-title,
+.fc .fc-timegrid-event .fc-event-time {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+/* If your custom dot+text wrapper is used in week/day, keep it tight too */
+.fc .fc-timegrid-event .fc-event-content-wrap {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+}
+
+
+/* Event content: tight dot + text */
+.fc .fc-event-content-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0px; /* ✅ EXACT spacing between dot and text */
+  min-width: 0;
+}
+
+
+/* Force FC's internal title/time wrappers to not add their own spacing */
+.fc .fc-event-content-wrap .fc-event-title,
+.fc .fc-event-content-wrap .fc-event-time,
+.fc .fc-event-content-wrap .fc-event-title-container,
+.fc .fc-event-content-wrap .fc-event-time-container,
+.fc .fc-event-content-wrap .fc-event-title.fc-sticky {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* If you want EXACT 3px between dot and text, do it here */
+.fc .fc-event-content-wrap {
+  gap: 3px !important;  /* set your desired spacing */
+}
+
+/* Small screens: slightly tighter */
+@media (max-width: 480px) {
+  .fc .fc-event-content-wrap {
+    gap: 2px !important;
+  }
+}
+
+/* Very small screens: ultra tight */
+@media (max-width: 360px) {
+  .fc .fc-event-content-wrap {
+    gap: 1px !important;
+  }
+}
+
+
+/* Make sure the text span doesn't introduce spacing/width weirdness */
+.fc .fc-event-content-wrap > span {
+  display: inline-block;
+  min-width: 0;
+}
+
+
+/* Shared dot */
+.fc-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  margin-right: 0; /* ✅ don't double-space; gap controls spacing */
+  flex: 0 0 auto;
+}
+
+/* red = cancelled */
+.fc-dot-cancel { background: #ef4444; }   /* red-500 */
+/* yellow = proposed */
+.fc-dot-proposed { background: #eab308; } /* amber-500 */
+/* green = scheduled */
+.fc-dot-scheduled { background: #22c55e; }/* green-500 */
+
+/* Weather: stop inheriting the day-number font sizing */
+.fc .fc-daygrid-day-number {
+  line-height: 1.1;
+}
+
+.fc .fc-weather-mini {
+  display: block;
+  font-size: 0.70rem;
+  line-height: 1.05;
+  font-weight: 600;
+  opacity: 0.95;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Make month cells readable on narrow screens */
+@media (max-width: 480px) {
+  .fc .fc-daygrid-event {
+    font-size: 0.68rem; /* slightly smaller so weather has room */
+    line-height: 1.05;
+  }
+
+  .fc .fc-toolbar-title {
+    font-size: 1.25rem;
+  }
+
+  .fc .fc-weather-mini {
+    font-size: 0.62rem;
+    line-height: 1.0;
+  }
+}
+
+/* VERY small screens: stack weather icon above temps and never clip icon */
+@media (max-width: 360px) {
+  .fc .fc-weather-mini {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+
+    overflow: visible;
+    white-space: normal;
+
+    font-size: 0.60rem;
+    line-height: 1.0;
+    margin-top: 2px;
+  }
+
+  .fc .fc-weather-icon {
+    display: block;
+    line-height: 1;
+    font-size: 0.95rem; /* make icon readable */
+  }
+
+  .fc .fc-weather-temps {
+    display: block;
+    line-height: 1;
+    font-weight: 700;
+  }
+}
+

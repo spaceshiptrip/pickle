@@ -275,7 +275,7 @@ const events = useMemo(
 
       return {
         id: it.Id,
-        title: isProposed ? `PROPOSED · ${it.Start}` : `Court ${it.Court} · $${it.BaseFee}`,
+        title: isProposed ? `PROPOSED · ${it.Start}` : `${it.Court} Court · $${it.BaseFee}`,
         start,
         end,
         extendedProps: it,
@@ -461,17 +461,25 @@ customButtons={{
 eventContent={(arg) => {
   const status = String(arg.event.extendedProps?.Status || '').toLowerCase();
   const isCancelled = status === 'cancelled' || status === 'canceled';
+  const isProposed = status === 'proposed';
+  const isScheduled = !isCancelled && !isProposed; // default bucket
 
   return (
     <div className="fc-event-content-wrap">
-      {isCancelled ? <span className="fc-cancel-dot" aria-hidden="true" /> : null}
+      {isCancelled ? (
+        <span className="fc-dot fc-dot-cancel" aria-hidden="true" />
+      ) : isProposed ? (
+        <span className="fc-dot fc-dot-proposed" aria-hidden="true" />
+      ) : isScheduled ? (
+        <span className="fc-dot fc-dot-scheduled" aria-hidden="true" />
+      ) : null}
+
       <span className={isCancelled ? 'fc-cancel-text' : ''}>
         {arg.event.title}
       </span>
     </div>
   );
 }}
-
 
     headerToolbar={
       isMobile
@@ -508,12 +516,14 @@ eventContent={(arg) => {
       return (
         <div style={{ lineHeight: 1.1 }}>
           <div>{dayNumber}</div>
-          <div
-            className="fc-weather-mini"
-            title={`High ${hi}° / Low ${lo}° · Rain ${w.pop ?? 0}%`}
-          >
-            {emoji} {hi}/{lo}
-          </div>
+<div
+  className="fc-weather-mini"
+  title={`High ${hi}° / Low ${lo}° · Rain ${w.pop ?? 0}%`}
+>
+  <span className="fc-weather-icon" aria-hidden="true">{emoji}</span>
+  <span className="fc-weather-temps">{hi}/{lo}</span>
+</div>
+
         </div>
       );
     }}
