@@ -448,74 +448,83 @@ async function setPaid(sheetRow, paid) {
         <div className={`relative w-full max-w-2xl rounded-xl shadow-2xl border overflow-hidden ${modalShellClass}`}>
 
           {/* Sticky header */}
-          <div className={`sticky top-0 z-30 border-b px-4 py-3 ${headerClass}`}>
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                {/* Line 1: Court/Proposed */}
-                <div className="flex items-center gap-2 min-w-0">
-                  {isProposed ? (
-                    <span className="shrink-0 bg-amber-500 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-tighter">
-                      Proposed
-                    </span>
-                  ) : (
-                    <span className="shrink-0 text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100">
-                      Court {reservation.Court} —
-                    </span>
-                  )}
-              
-                  {/* Keep this part from blowing up the row */}
-                  {!isProposed && (
-                    <span className="min-w-0 text-lg font-semibold text-slate-900 dark:text-slate-100 truncate">
-                      {/* optional: if you ever add a long location/name, it won't wreck the layout */}
-                    </span>
-                  )}
-                </div>
-              
-                {/* Line 2: Date/time (wraps naturally) */}
-                <div className="mt-0.5 text-sm font-semibold text-slate-700 dark:text-slate-200 break-words">
-                  {formatDateMmmDdYyyy(reservation.Date)} ·{' '}
-                  {formatTimeAmPm(reservation.Start)} – {formatTimeAmPm(reservation.End)}
-                </div>
+<div className={`sticky top-0 z-30 border-b px-4 py-3 ${headerClass}`}>
+  {/* Mobile: stack. Desktop: side-by-side */}
+  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+    {/* LEFT: title/date gets full width on mobile */}
+    <div className="min-w-0 w-full sm:flex-1">
+      <div className="flex items-center gap-2 min-w-0">
+        {isProposed && (
+          <span className="shrink-0 bg-amber-500 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-tighter">
+            Proposed
+          </span>
+        )}
 
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {isAdmin && (
-                  <button
-                    onClick={() => {
-                      if (onEditReservation) return onEditReservation(reservation);
-                      alert('Edit (admin) clicked — wire onEditReservation() when ready.');
-                    }}
-                    className={`text-xs font-black uppercase tracking-widest px-3 py-1 border rounded transition-colors ${
-                      isProposed
-                        ? 'bg-amber-600 text-white border-amber-700 hover:bg-amber-700'
-                        : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-200 dark:border-indigo-500/30 dark:hover:bg-indigo-500/25'
-                    }`}
-                    type="button"
-                  >
-                    {isProposed ? 'Review & Confirm' : 'Edit'}
-                  </button>
-                )}
+        {/* Title: single line on mobile, up to 2 on sm+ */}
+        <div
+          className="
+            min-w-0 flex-1
+            text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100
+            leading-tight
+            truncate
+            sm:whitespace-normal
+            sm:[display:-webkit-box]
+            sm:[-webkit-box-orient:vertical]
+            sm:overflow-hidden
+            sm:[-webkit-line-clamp:2]
+          "
+          title={`Court ${reservation.Court}`}
+        >
+          {`Court ${reservation.Court}`}
+        </div>
+      </div>
 
-                <a
-                  href={smsHref}
-                  className="flex items-center gap-2 text-sm font-bold px-3 py-1 rounded border
-                             bg-white text-slate-900 border-slate-300 hover:bg-slate-50
-                             dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-700"
-                  >
-                  <span>💬</span>
-                  <span>Text Jay</span>
-                </a>
-                <button
-                  onClick={handleClose}
-                  className="flex items-center gap-2 text-sm font-bold px-3 py-1 bg-black text-white rounded hover:bg-gray-900 transition-colors"
-                  type="button"
-                >
-                  <span>✕</span>
-                  <span>Close</span>
-                </button>
-              </div>
-            </div>
-          </div>
+      <div className="mt-0.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
+        {formatDateMmmDdYyyy(reservation.Date)} ·{' '}
+        {formatTimeAmPm(reservation.Start)} – {formatTimeAmPm(reservation.End)}
+      </div>
+    </div>
+
+    {/* RIGHT: buttons become row 2 on mobile, wrap nicely */}
+    <div className="flex flex-wrap gap-2 w-full sm:w-auto sm:shrink-0 sm:justify-end">
+      {isAdmin && (
+        <button
+          onClick={() => {
+            if (onEditReservation) return onEditReservation(reservation);
+            alert('Edit (admin) clicked — wire onEditReservation() when ready.');
+          }}
+          className={`text-xs font-black uppercase tracking-widest px-3 py-1 border rounded transition-colors ${
+            isProposed
+              ? 'bg-amber-600 text-white border-amber-700 hover:bg-amber-700'
+              : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-200 dark:border-indigo-500/30 dark:hover:bg-indigo-500/25'
+          }`}
+          type="button"
+        >
+          {isProposed ? 'Review & Confirm' : 'Edit'}
+        </button>
+      )}
+
+      <a
+        href={smsHref}
+        className="flex items-center gap-2 text-sm font-bold px-3 py-1 rounded border
+                   bg-white text-slate-900 border-slate-300 hover:bg-slate-50
+                   dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-700"
+      >
+        <span>💬</span>
+        <span>Text Jay</span>
+      </a>
+
+      <button
+        onClick={handleClose}
+        className="flex items-center gap-2 text-sm font-bold px-3 py-1 bg-black text-white rounded hover:bg-gray-900 transition-colors"
+        type="button"
+      >
+        <span>✕</span>
+        <span>Close</span>
+      </button>
+    </div>
+  </div>
+</div>
 
           {uiLocked && (
             <div className="absolute inset-0 z-20 bg-slate-900/10 dark:bg-slate-900/30 backdrop-blur-[1px] flex items-center justify-center">

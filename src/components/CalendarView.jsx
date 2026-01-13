@@ -6,6 +6,47 @@ import interactionPlugin from '@fullcalendar/interaction';
 import { apiGet } from '../api';
 import { COURT_LAT, COURT_LON, COURT_TIMEZONE } from '../config';
 
+import { createPortal } from 'react-dom';
+
+function CenterTitleSpinnerPortal({ show }) {
+  const [mountEl, setMountEl] = useState(null);
+
+  const findTitleEl = () =>
+    document.querySelector('.fc .fc-toolbar-title');
+
+  useEffect(() => {
+    if (!show) return;
+    setMountEl(findTitleEl());
+  }, [show]);
+
+  // Re-find when the calendar rerenders (view change, next/prev, etc.)
+  useEffect(() => {
+    if (!show) return;
+    const id = setInterval(() => {
+      const el = findTitleEl();
+      if (el) {
+        setMountEl(el);
+        clearInterval(id);
+      }
+    }, 50);
+    return () => clearInterval(id);
+  }, [show]);
+
+  if (!show || !mountEl) return null;
+
+  return createPortal(
+    <span
+      className="inline-flex items-center ml-2 align-middle"
+      title="Loading calendar…"
+      aria-label="Loading calendar…"
+    >
+      <Spinner className="h-4 w-4" />
+    </span>,
+    mountEl
+  );
+}
+
+
 function useIsMobile(breakpointPx = 520) {
   const [isMobile, setIsMobile] = useState(() => window.innerWidth <= breakpointPx);
 
@@ -216,17 +257,6 @@ useEffect(() => {
             {forecastDays === 16 ? '16' : '7'}
           </button>
 
-    {/* ⭐ OPTIONAL separate indicator */}
-    {loading && (
-      <div
-        className="inline-flex items-center"
-        title="Loading calendar…"
-        aria-label="Loading calendar…"
-      >
-        <Spinner />
-      </div>
-    )}
-
 
         </div>
 
@@ -310,6 +340,8 @@ customButtons={{
     slotMaxTime="23:00:00"
   />
 </div>
+
+<CenterTitleSpinnerPortal show={loading} />
 
     </div>
   );
