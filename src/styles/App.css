@@ -275,3 +275,30 @@ button:disabled {
   animation: fc-spin 1s linear infinite;
 }
 
+
+/* Cancelled events: red dot + strikethrough text */
+.fc .fc-event .fc-event-content-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fc .fc-event-cancelled .fc-cancel-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: #ef4444; /* red */
+  flex: 0 0 auto;
+}
+
+.fc .fc-event-cancelled .fc-cancel-text {
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  text-decoration-color: #ef4444; /* red strike */
+}
+
+
+.fc .fc-event-cancelled {
+  opacity: 0.75;
+}
+
