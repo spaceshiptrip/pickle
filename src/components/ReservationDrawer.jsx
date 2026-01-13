@@ -50,6 +50,7 @@ const isAdmin = role?.toLowerCase() === 'admin';
 const status = String(reservation?.Status || '').toLowerCase();
 const isProposed = status === 'proposed';
 const isCanceled = status === 'cancelled' || status === 'canceled';
+const isScheduled = !isProposed && !isCanceled;
 
 
   // Local event start Date (avoid "Z" so it stays local time)
@@ -420,7 +421,9 @@ async function setPaid(sheetRow, paid) {
 const headerClass = isCanceled
   ? 'bg-rose-50 border-rose-200 dark:bg-rose-500/10 dark:border-rose-500/30'
     : isProposed
-	    ? 'bg-amber-100 border-amber-200 dark:bg-amber-500/15 dark:border-amber-500/30'
+	  ? 'bg-amber-100 border-amber-200 dark:bg-amber-500/15 dark:border-amber-500/30'
+	    : isScheduled
+		  ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-500/10 dark:border-emerald-500/30'
 		    : 'bg-white dark:bg-slate-900 dark:border-slate-700';
 
   const panelClass =
@@ -479,7 +482,13 @@ const headerClass = isCanceled
 className={`
   min-w-0 flex-1
   text-base sm:text-lg font-semibold
-  ${isCanceled ? 'text-rose-700 dark:text-rose-300' : 'text-slate-900 dark:text-slate-100'}
+  ${isCanceled
+    ? 'text-rose-700 dark:text-rose-300'
+    : isProposed
+    ? 'text-amber-900 dark:text-amber-200'
+    : isScheduled
+    ? 'text-emerald-900 dark:text-emerald-200'
+    : 'text-slate-900 dark:text-slate-100'}
   leading-tight
   truncate
   sm:whitespace-normal
