@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+
 import { apiGet, apiPost } from '../api';
 
 const COURT_OPTIONS = ['North', 'South', 'Other'];
@@ -88,7 +89,7 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
           Date: editReservation.Date,
           Start: editReservation.Start,
           End: editReservation.End,
-          Court: editReservation.Court,
+          Court: COURT_OPTIONS.includes(editReservation.Court) ? editReservation.Court : 'Other',
           Capacity: editReservation.Capacity || 8,
           BaseFee: editReservation.BaseFee || 5,
           Status: editReservation.Status || 'reserved',
