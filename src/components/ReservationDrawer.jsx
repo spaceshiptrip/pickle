@@ -374,28 +374,37 @@ useEffect(() => {
     })();
   }, [isAdmin]);
 
-  const allNameOptions = useMemo(() => {
-    return [...(userNames || []), ...EXTRA_NAME_OPTIONS];
-  }, [userNames]);
+const allNameOptions = useMemo(() => {
+  // Non-admin: keep it private, just allow TBD/Other
+  return isAdmin ? [...(userNames || []), ...EXTRA_NAME_OPTIONS] : EXTRA_NAME_OPTIONS;
+}, [isAdmin, userNames]);
 
-  const perPlayer = useMemo(() => {
-    const amt = total ? Number(total) : totalFees;
+const perPlayer = useMemo(() => {
+  const amt = total ? Number(total) : totalFees; // per-person
+  return Math.round((amt || 0) * 100) / 100;
+}, [total, totalFees]);
 
-    let count = 1;
-    if (isAdmin) {
-      const resolved = players
-        .map((p, i) => {
-          const v = (p || '').trim();
-          if (!v) return '';
-          if (v === 'Other') return (playerOthers[i] || '').trim();
-          return v;
-        })
-        .filter(Boolean);
-      count = Math.max(resolved.length, 1);
-    }
 
-    return Math.round((amt / count) * 100) / 100;
-  }, [total, totalFees, players, playerOthers, isAdmin]);
+const signupCount = useMemo(() => {
+  const resolved = players
+    .map((p, i) => {
+      const v = (p || '').trim();
+      if (!v) return '';
+      if (v === 'Other') {
+        const other = (playerOthers[i] || '').trim();
+        return other ? other : '';
+      }
+      return v;
+    })
+    .filter(Boolean);
+
+  return isAdmin ? resolved.length : Math.max(resolved.length, 1);
+}, [players, playerOthers, isAdmin]);
+
+const suggestedTotalDue = useMemo(() => {
+  return Math.round(perPlayer * signupCount * 100) / 100;
+}, [perPlayer, signupCount]);
+
 
   const used = rosterLoading ? '…' : roster.length;
 
@@ -431,10 +440,22 @@ function resolveSelectedPlayers() {
       if (v === 'Other') return (playerOthers[i] || '').trim();
       return v;
     })
+    .map((s) => (s || '').trim())
     .filter(Boolean);
 
-  // prevent empty submit
-  return resolved.length ? resolved : [];
+  if (isAdmin) {
+    // Admin MUST select explicit names
+    return resolved;
+  }
+
+  // Non-admin: always include self at least once
+  const me = (myName || '').trim();
+  if (!me) return resolved;
+
+  if (!resolved.length) return [me];
+
+  const hasMe = resolved.some((n) => n.toLowerCase() === me.toLowerCase());
+  return hasMe ? resolved : [me, ...resolved];
 }
 
 async function submit() {
@@ -448,59 +469,58 @@ async function submit() {
       return;
     }
 
-    if (isAdmin) {
-      const selected = resolveSelectedPlayers();
+    const selected = resolveSelectedPlayers();
+    console.log('signup selected:', selected, { players, playerOthers, isAdmin });
 
-      if (selected.length === 0) {
-        showToast('error', 'Select at least one player.');
-        return;
-      }
 
-      const hasOtherMissing = players.some(
-        (p, i) => p === 'Other' && !(playerOthers[i] || '').trim()
-      );
-      if (hasOtherMissing) {
-        await askConfirm({
-          title: 'Missing name',
-          message: 'Please fill in the name for any "Other" player.',
-          confirmText: 'OK',
-          cancelText: '', // no cancel button
-        });
-        return;
-      }
-
-      const payload = {
-        reservationId: reservation.Id,
-        players: selected,                 // ✅ backend admin path
-        totalAmount: total ? Number(total) : undefined,
-        markPaid: !!markPaid,
-      };
-
-      const res = await apiPost('signup', payload);
-      if (!res?.ok) {
-        showToast('error', res?.error || 'Failed to sign up');
-        return;
-      }
-
-      await refreshRoster();
-      setPlayers(['']);
-      setPlayerOthers(['']);
-      setTotal('');
-      setMarkPaid(false);
-
-      showToast('success', `Signed up ${selected.length} player${selected.length === 1 ? '' : 's'}`);
+    if (selected.length === 0) {
+      showToast('error', isAdmin ? 'Select at least one player.' : 'Enter at least one name (use Other).');
       return;
     }
 
-    // Non-admin: sign up self (existing behavior)
-    const res = await apiPost('signup', { reservationId: reservation.Id });
+
+const hasOtherMissing = players.some((p, i) => {
+  if (p !== 'Other') return false;
+  // only block if user actively chose Other in that row
+  return !(playerOthers[i] || '').trim();
+});
+
+if (hasOtherMissing) {
+  await askConfirm({
+    title: 'Missing name',
+    message: 'You selected "Other" but did not enter a name.',
+    confirmText: 'OK',
+    cancelText: '',
+  });
+  return;
+}
+
+
+const perPersonAmount = total ? Number(total) : totalFees; // always per-person
+
+const payload = {
+  reservationId: reservation.Id,
+  players: selected,
+  perPersonAmount,                    // ALWAYS send per-person
+  markPaid: isAdmin ? !!markPaid : false,
+};
+
+console.log('signup payload:', payload);
+
+    const res = await apiPost('signup', payload);
     if (!res?.ok) {
       showToast('error', res?.error || 'Failed to sign up');
       return;
     }
 
     await refreshRoster();
-    showToast('success', 'Signed up');
+
+    setPlayers(['']);
+    setPlayerOthers(['']);
+    setTotal('');
+    if (isAdmin) setMarkPaid(false);
+
+    showToast('success', `Signed up ${selected.length} player${selected.length === 1 ? '' : 's'}`);
   } catch (e) {
     showToast('error', 'Failed to sign up: ' + (e?.message || String(e)));
   } finally {
@@ -749,8 +769,7 @@ className={`
             <div className={`mt-4 ${panelClass}`}>
               <div className="font-medium mb-2 text-slate-900 dark:text-slate-100">Sign up</div>
 
-              {isAdmin &&
-                players.map((p, i) => {
+              { players.map((p, i) => {
                   const isOther = p === 'Other';
 
                   return (
@@ -772,7 +791,8 @@ className={`
                             }
                           }}
                         >
-                          <option value="">Select player…</option>
+                    <option value="">{isAdmin ? 'Select player…' : 'Add person…'}</option>
+
                           {allNameOptions.map((name) => (
                             <option key={name} value={name}>
                               {name}
@@ -838,14 +858,17 @@ className={`
 
               {!isProposed && (
                 <div className="flex gap-2 items-center mb-2 flex-wrap">
-                  <label className={`text-sm ${subtleTextClass}`}>Total you’ll pay now (optional):</label>
-                  <input
-                    className={`${inputClass} w-28`}
-                    placeholder={String(totalFees)}
-                    value={total}
-                    onChange={(e) => setTotal(e.target.value)}
-                  />
-                  <span className="text-sm text-slate-500 dark:text-slate-300">= ~ ${perPlayer}/player</span>
+                <label className={`text-sm ${subtleTextClass}`}>Per-player amount (optional):</label>
+<input
+  className={`${inputClass} w-28`}
+  placeholder={String(totalFees)}
+  value={total}
+  onChange={(e) => setTotal(e.target.value)}
+/>
+<span className="text-sm text-slate-500 dark:text-slate-300">
+  ${perPlayer} each · {signupCount} player{signupCount === 1 ? '' : 's'} · total ${suggestedTotalDue}
+</span>
+
                 </div>
               )}
 
@@ -871,13 +894,15 @@ className={`
                 {!isProposed && (
                   uiLocked ? (
                     <span className="rounded px-4 py-2 font-semibold bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300 cursor-not-allowed">
-                      Pay ${perPlayer} via Venmo
+                    Pay ${suggestedTotalDue} via Venmo
+
                     </span>
                   ) : (
                     <a
                       className="rounded px-4 py-2 font-semibold bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors
                                  dark:bg-indigo-500/15 dark:text-indigo-200 dark:hover:bg-indigo-500/25"
-                      href={`${VENMO_URL}?txn=pay&amount=${perPlayer}&note=Pickleball ${reservation.Date} ${reservation.Start}`}
+                    href={`${VENMO_URL}?txn=pay&amount=${suggestedTotalDue}&note=Pickleball ${reservation.Date} ${reservation.Start}`}
+
                       target="_blank"
                       rel="noreferrer"
                     onClick={async (e) => {
@@ -885,7 +910,8 @@ className={`
 }}
 
                     >
-                      Pay ${perPlayer} via Venmo
+                      Pay ${suggestedTotalDue} via Venmo
+
                     </a>
                   )
                 )}
