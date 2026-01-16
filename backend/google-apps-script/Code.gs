@@ -64,6 +64,13 @@ function doGet(e) {
     return json_(listUsers_(ctxUsers));
   }
 
+  if (action === 'listgroups') {
+    var ctxG = requireAuth_(e, null);
+    requireRole_(ctxG, ['admin']); // admin-only
+    return json_(listGroups_());
+  }
+
+
   return json_({ ok: false, error: 'unknown_action' }, 400);
 }
 
@@ -246,6 +253,14 @@ function parseUserIdCsv_(s) {
     .filter(Boolean);
 }
 
+function parseGroupCsv_(s) {
+  return String(s || '')
+    .split(',')
+    .map(function(x){ return String(x).trim(); })
+    .filter(Boolean);
+}
+
+
 function canSeeReservation_(ctx, resObj) {
   // Admin sees all
   if (ctx && String(ctx.role).toLowerCase() === 'admin') return true;
@@ -261,7 +276,18 @@ function canSeeReservation_(ctx, resObj) {
   if (!uid) return false;
 
   var allow = parseUserIdCsv_(resObj && resObj.VisibleToUserIds);
-  return allow.indexOf(uid) !== -1;
+  if (allow.indexOf(uid) !== -1) return true;
+
+  // NEW: group-based allowlist (optional)
+  var userGroup = (ctx && ctx.user && ctx.user.Group) ? String(ctx.user.Group).trim().toLowerCase() : '';
+  if (!userGroup) return false;
+
+  var groups = parseGroupCsv_(resObj && resObj.VisibleToGroups).map(function(g){
+    return String(g).trim().toLowerCase();
+  });
+
+  return groups.indexOf(userGroup) !== -1;
+
 }
 
 
@@ -413,10 +439,21 @@ function isAllowlistedForAny_(ctx, items) {
   var uid = (ctx && ctx.userId) ? String(ctx.userId) : '';
   if (!uid) return false;
 
+  var userGroup = (ctx && ctx.user && ctx.user.Group) ? String(ctx.user.Group).trim().toLowerCase() : '';
+
   return (items || []).some(function(it){
     var allow = parseUserIdCsv_(it && it.VisibleToUserIds);
-    return allow.indexOf(uid) !== -1;
+    if (allow.indexOf(uid) !== -1) return true;
+
+    if (userGroup) {
+      var groups = parseGroupCsv_(it && it.VisibleToGroups).map(function(g){ return String(g).trim().toLowerCase(); });
+      if (groups.indexOf(userGroup) !== -1) return true;
+    }
+
+    return false;
   });
+
+
 }
 
 
@@ -433,6 +470,8 @@ function listReservations(ctx) {
 
   var hasVisibility = (rIdx['Visibility'] !== undefined);
   var hasAllow = (rIdx['VisibleToUserIds'] !== undefined);
+  var hasGroupAllow = (rIdx['VisibleToGroups'] !== undefined);
+
 
   var feesByRes = {};
   for (var j=0;j<ft.rows.length;j++){
@@ -467,6 +506,8 @@ function listReservations(ctx) {
       Status: String(r[rIdx['Status']] || 'reserved').toLowerCase().trim(),
       Visibility: hasVisibility ? normalizeVisibility_(r[rIdx['Visibility']]) : 'member',
       VisibleToUserIds: hasAllow ? String(r[rIdx['VisibleToUserIds']] || '').trim() : '',
+      VisibleToGroups: hasGroupAllow ? String(r[rIdx['VisibleToGroups']] || '').trim() : '',
+
       Fees: feesByRes[id] || []
     };
   });
@@ -757,7 +798,9 @@ function upsertReservation_(payload) {
     'BaseFee': payload.BaseFee,
     'Status': status,
     'Visibility': visibility,
-    'VisibleToUserIds': String(payload.VisibleToUserIds || '').trim()
+    'VisibleToUserIds': String(payload.VisibleToUserIds || '').trim(),
+    'VisibleToGroups': String(payload.VisibleToGroups || '').trim()
+
   };
 
   upsertRowById_(sh, 'Id', row);
@@ -975,6 +1018,30 @@ function listUsers_(ctx) {
   return { ok: true, users: out };
 }
 
+
+
+function listGroups_() {
+  var sh = sheetByName(USERS_SHEET_NAME);
+  var t = readTable_(sh);
+  if (!t.header || t.header.length === 0) return { ok: true, groups: [] };
+
+  var idx = headerIndexMap_(t.header);
+  if (idx['Group'] === undefined) return { ok: true, groups: [] };
+
+  var set = {};
+  for (var i = 0; i < t.rows.length; i++) {
+    var g = String(t.rows[i][idx['Group']] || '').trim();
+    if (g) set[g] = true;
+  }
+
+  var groups = Object.keys(set).sort(function(a,b){
+    return a.toLowerCase().localeCompare(b.toLowerCase());
+  });
+
+  return { ok: true, groups: groups };
+}
+
+
 function idxHasHeader_(header, colName) {
   for (var i = 0; i < header.length; i++) {
     if (String(header[i]).trim() === colName) return true;
@@ -1088,7 +1155,9 @@ function rowToUser_(header, row, idx) {
     LoginHash: (idx['LoginHash'] !== undefined) ? String(row[idx['LoginHash']] || '').trim() : '',
     Venmo: String(row[idx['Venmo']] || '').trim(),
     PinHash: String(row[idx['PinHash']] || '').trim(),
-    Active: active
+    Active: active,
+    Group: (idx['Group'] !== undefined) ? String(row[idx['Group']] || '').trim() : ''
+
   };
 }
 
@@ -1481,10 +1550,11 @@ function round2_(n){ return Math.round((Number(n)||0)*100)/100; }
 /** ---- Setup note (one-time) ----
 Create these headers exactly:
 
-Reservations:  Id | Date | Start | End | Court | Capacity | BaseFee | Status | Visibility | VisibleToUserIds
+Reservations:  Id | Date | Start | End | Court | Capacity | BaseFee | Status | Visibility | VisibleToUserIds | VisibleToGroups
+Users:         UserId | Role | Name | Phone | Email | LoginHash | Venmo | PinHash | Active | Group
+
 Attendance: Date | Hours | Player Name | UserId | Present (1/0) | Charge (auto) | PAID | ReservationId
 Fees:          ReservationId | FeeName | Amount
-Users:         UserId | Role | Name | Phone | Email | LoginHash | Venmo | PinHash | Active
 
 AuthTokens:    Token | UserId | ExpiresAt | Used | CreatedAt
 Sessions:      SessionId | UserId | Role | CreatedAt | ExpiresAt | Revoked
