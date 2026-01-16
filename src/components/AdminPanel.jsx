@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+
 import { apiGet, apiPost } from '../api';
 
 const COURT_OPTIONS = ['North', 'South', 'Other'];
@@ -21,16 +22,17 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
     // Form state for Proposed Dates (Issue #31)
     const [reservations, setReservations] = useState([]);
     const [form, setForm] = useState({
-      Id: '',
-      Date: '',
-      Start: '',
-      End: '',
-      Court: 'North',
-      Capacity: 8,
-      BaseFee: 5,
-      Status: 'reserved',
-      Visibility: 'member',            // NEW
-      VisibleToUserIds: ''            // NEW (optional allowlist)
+     Id: '',
+     Date: '',
+     Start: '',
+     End: '',
+     Court: 'North',
+     Capacity: 8,
+     BaseFee: 5,
+     Status: 'reserved',
+     Visibility: 'member',
+     VisibleToUserIds: '',
+     VisibleToGroups: ''   // ✅ add
     });
 
     // For "Other" court text entry (kept separate so we can still store final value in form.Court)
@@ -80,24 +82,32 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
         'dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600 dark:hover:bg-slate-700';
 
     // When editReservation prop changes, pre-fill the form and scroll into view
-    useEffect(() => {
-        if (editReservation) {
-            setForm({
-                Id: editReservation.Id,
-                Date: editReservation.Date,
-                Start: editReservation.Start,
-                End: editReservation.End,
-                Court: editReservation.Court,
-                Capacity: editReservation.Capacity || 8,
-                BaseFee: editReservation.BaseFee || 5,
-                Status: editReservation.Status || 'reserved',
-                Visibility: editReservation.Visibility || 'member',
-                VisibleToUserIds: editReservation.VisibleToUserIds || ''
-            });
-            // Scroll to the admin panel form
-            document.getElementById('admin-reservation-form')?.scrollIntoView({ behavior: 'smooth' });
-        }
+      useEffect(() => {
+      if (editReservation) {
+        setForm({
+          Id: editReservation.Id,
+          Date: editReservation.Date,
+          Start: editReservation.Start,
+          End: editReservation.End,
+          Court: COURT_OPTIONS.includes(editReservation.Court) ? editReservation.Court : 'Other',
+          Capacity: editReservation.Capacity || 8,
+          BaseFee: editReservation.BaseFee || 5,
+          Status: editReservation.Status || 'reserved',
+          Visibility: editReservation.Visibility || 'member',
+          VisibleToUserIds: editReservation.VisibleToUserIds || '',
+          VisibleToGroups: editReservation.VisibleToGroups || ''
+        });
+
+        // ✅ PUT THIS RIGHT HERE
+        const court = editReservation.Court || '';
+        if (court && !COURT_OPTIONS.includes(court)) setCourtOther(court);
+        else setCourtOther('');
+
+        // Scroll to the admin panel form
+        document.getElementById('admin-reservation-form')?.scrollIntoView({ behavior: 'smooth' });
+      }
     }, [editReservation]);
+
 
 
 const [mounted, setMounted] = useState(true);
@@ -120,7 +130,9 @@ useEffect(() => {
         BaseFee: 5,
         Status: 'reserved',
         Visibility: 'member',
-        VisibleToUserIds: ''
+        VisibleToUserIds: '',
+        VisibleToGroups: '' 
+
       });
       setCourtOther('');
       setPreCancelStatus(null);
@@ -428,6 +440,24 @@ async function saveReservation() {
       value={form.VisibleToUserIds || ''}
       onChange={(e) => setForm({ ...form, VisibleToUserIds: e.target.value })}
     />
+
+
+
+    <div className="mt-2">
+      <label className={labelClass}>
+        Allow specific groups (optional) — comma-separated group names
+      </label>
+      <input
+        className={inputClass}
+        placeholder="Example: A,B,WednesdayCrew"
+        value={form.VisibleToGroups || ''}
+        onChange={(e) => setForm({ ...form, VisibleToGroups: e.target.value })}
+      />
+      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+        Users with a matching Users.Group can see this event even if their role is too low.
+      </div>
+    </div>
+
     <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
       If someone’s role is too low, they can still see this event if their UserId is listed here.
     </div>
