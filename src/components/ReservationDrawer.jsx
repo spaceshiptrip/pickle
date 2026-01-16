@@ -14,6 +14,67 @@ function Spinner({ className = "h-4 w-4" }) {
   );
 }
 
+function ConfirmModal({
+  open,
+  title,
+  message,
+  confirmText = 'OK',
+  cancelText = 'Cancel',
+  onConfirm,
+  onCancel,
+  danger = false,
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+      <div
+        className="absolute inset-0 bg-slate-900/70 backdrop-blur-[2px]"
+        onMouseDown={onCancel}
+        onTouchStart={onCancel}
+        aria-hidden="true"
+      />
+
+      <div
+        className="relative w-full max-w-md rounded-xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-slate-700 dark:bg-slate-800"
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+      >
+        <div className="text-base font-bold text-slate-900 dark:text-slate-100">
+          {title}
+        </div>
+
+        <div className="mt-2 whitespace-pre-line text-sm text-slate-700 dark:text-slate-200">
+          {message}
+        </div>
+
+        <div className="mt-4 flex justify-end gap-2">
+          {cancelText ? (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+            >
+              {cancelText}
+            </button>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            className={`rounded px-3 py-1.5 text-sm font-semibold text-white ${
+              danger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+          >
+            {confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function formatDateMmmDdYyyy(dateStr) {
   // dateStr = "YYYY-MM-DD"
   const d = new Date(dateStr + 'T00:00:00');
@@ -69,6 +130,24 @@ const isScheduled = !isProposed && !isCanceled;
   }, [hoursToStart]);
 
 
+  const [modal, setModal] = useState(null);
+// modal: { title, message, confirmText, cancelText, danger, resolve }
+
+function askConfirm({ title, message, confirmText = 'OK', cancelText = 'Cancel', danger = false }) {
+  return new Promise((resolve) => {
+    setModal({ title, message, confirmText, cancelText, danger, resolve });
+  });
+}
+
+function closeModal(result) {
+  setModal((m) => {
+    if (m?.resolve) m.resolve(result);
+    return null;
+  });
+}
+
+
+
 
   const smsHref = useMemo(() => {
     const when = reservation?.Date && reservation?.Start
@@ -83,26 +162,34 @@ const isScheduled = !isProposed && !isCanceled;
   }, [reservation?.Date, reservation?.Start, reservation?.Id]);
 
 
-  function confirmTextWarning() {
-    if (!needsTextWarning) return true;
 
-    const when = reservation?.Date && reservation?.Start
-      ? `${formatDateMmmDdYyyy(reservation.Date)} ${formatTimeAmPm(reservation.Start)}`
-      : 'this reservation';
+async function confirmTextWarningAsync() {
+  if (!needsTextWarning) return true;
 
-    const ok = window.confirm(
-      `⚠️ Heads up: ${when} starts in under 30 hours.\n\n` +
+  const when = reservation?.Date && reservation?.Start
+    ? `${formatDateMmmDdYyyy(reservation.Date)} ${formatTimeAmPm(reservation.Start)}`
+    : 'this reservation';
+
+  const ok = await askConfirm({
+    title: 'Heads up',
+    message:
+      `⚠️ ${when} starts in under 30 hours.\n\n` +
       `You MUST text Jay to coordinate.\n\n` +
-      `Press OK to continue, or Cancel to go text now.`
-    );
+      `Continue anyway?`,
+    confirmText: 'Continue',
+    cancelText: 'Text Jay',
+    danger: true,
+  });
 
-    if (!ok) {
-      // User chose Cancel → open SMS composer immediately
-      window.open(smsHref, '_self');
-      return false;
-    }
-    return true;
+  if (!ok) {
+    window.open(smsHref, '_self');
+    return false;
   }
+  return true;
+}
+
+
+
 
   const myName = (user?.Name || user?.name || '').trim();
 
@@ -112,25 +199,24 @@ const isScheduled = !isProposed && !isCanceled;
     return (roster || []).some(r => String(r.Player || '').trim().toLowerCase() === me);
   }, [roster, myName]);
 
- async function cancelRsvp(sheetRow) {
-  if (uiLocked) return;
-  if (!confirmTextWarning()) return;
 
-  const ok = window.confirm('Cancel this RSVP?');
+async function cancelRsvp(sheetRow) {
+  if (uiLocked) return;
+  if (!(await confirmTextWarningAsync())) return;
+
+  const ok = await askConfirm({
+    title: 'Cancel RSVP?',
+    message: 'Cancel this RSVP?',
+    confirmText: 'Yes, cancel',
+    cancelText: 'Keep',
+    danger: true,
+  });
   if (!ok) return;
 
   setBusy(true);
   try {
-    const res = await apiPost('cancelrsvp', {
-      reservationId: reservation.Id,
-      sheetRow, // ✅ cancels ONE specific row
-    });
-
-    if (!res?.ok) {
-      showToast('error', res?.error || 'Failed to cancel RSVP');
-      return;
-    }
-
+    const res = await apiPost('cancelrsvp', { reservationId: reservation.Id, sheetRow });
+    if (!res?.ok) return showToast('error', res?.error || 'Failed to cancel RSVP');
     await refreshRoster();
     showToast('success', 'RSVP cancelled');
   } catch (e) {
@@ -140,24 +226,23 @@ const isScheduled = !isProposed && !isCanceled;
   }
 }
 
+
 async function adminCancelRsvp(sheetRow) {
   if (uiLocked) return;
 
-  const ok = window.confirm('Cancel this player RSVP?');
+  const ok = await askConfirm({
+    title: 'Cancel player RSVP?',
+    message: 'Cancel this player RSVP?',
+    confirmText: 'Yes, cancel',
+    cancelText: 'Keep',
+    danger: true,
+  });
   if (!ok) return;
 
   setBusy(true);
   try {
-    const res = await apiPost('cancelrsvp', {
-      reservationId: reservation.Id,
-      sheetRow, // ✅ cancels ONE specific row
-    });
-
-    if (!res?.ok) {
-      showToast('error', res?.error || 'Failed to cancel RSVP');
-      return;
-    }
-
+    const res = await apiPost('cancelrsvp', { reservationId: reservation.Id, sheetRow });
+    if (!res?.ok) return showToast('error', res?.error || 'Failed to cancel RSVP');
     await refreshRoster();
     showToast('success', 'RSVP cancelled');
   } catch (e) {
@@ -219,13 +304,17 @@ async function adminCancelRsvp(sheetRow) {
   }, []);
 
   // ESC to close
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      if (e.key === 'Escape') handleClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleClose]);
+useEffect(() => {
+  const onKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      if (modal) return closeModal(false);
+      handleClose();
+    }
+  };
+  window.addEventListener('keydown', onKeyDown);
+  return () => window.removeEventListener('keydown', onKeyDown);
+}, [handleClose, modal]);
+
 
   // totalFees calc
   const totalFees = useMemo(() => {
@@ -334,54 +423,90 @@ async function adminCancelRsvp(sheetRow) {
   }
 
 
-  async function submit() {
-    if (uiLocked) return;
-    if (!confirmTextWarning()) return;
-    setBusy(true);
+function resolveSelectedPlayers() {
+  const resolved = players
+    .map((p, i) => {
+      const v = (p || '').trim();
+      if (!v) return '';
+      if (v === 'Other') return (playerOthers[i] || '').trim();
+      return v;
+    })
+    .filter(Boolean);
 
-    try {
-      const names = isAdmin
-        ? players
-            .map((p, i) => {
-              const v = (p || '').trim();
-              if (!v) return '';
-              if (v === 'Other') return (playerOthers[i] || '').trim();
-              return v;
-            })
-            .filter(Boolean)
-        : [];
+  // prevent empty submit
+  return resolved.length ? resolved : [];
+}
 
-      if (isAdmin && names.length === 0) return;
+async function submit() {
+  if (uiLocked) return;
+  if (!(await confirmTextWarningAsync())) return;
 
-      if (isAdmin) {
-        const hasOtherMissing = players.some((p, i) => p === 'Other' && !(playerOthers[i] || '').trim());
-        if (hasOtherMissing) return alert('Please fill in the name for any "Other" player.');
-      }
+  setBusy(true);
+  try {
+    if (!reservation?.Id) {
+      showToast('error', 'Missing reservation id');
+      return;
+    }
 
-      const res = await apiPost('signup', {
-        reservationId: reservation.Id,
-        ...(isAdmin ? { players: names } : {}),
-        markPaid,
-        totalAmount: total ? Number(total) : totalFees,
-      });
+    if (isAdmin) {
+      const selected = resolveSelectedPlayers();
 
-      if (!res.ok) {
-        showToast('error', res.error || 'Failed to sign up');
+      if (selected.length === 0) {
+        showToast('error', 'Select at least one player.');
         return;
       }
 
-      // IMPORTANT: keep locked while roster refreshes
-      await refreshRoster();
+      const hasOtherMissing = players.some(
+        (p, i) => p === 'Other' && !(playerOthers[i] || '').trim()
+      );
+      if (hasOtherMissing) {
+        await askConfirm({
+          title: 'Missing name',
+          message: 'Please fill in the name for any "Other" player.',
+          confirmText: 'OK',
+          cancelText: '', // no cancel button
+        });
+        return;
+      }
 
+      const payload = {
+        reservationId: reservation.Id,
+        players: selected,                 // ✅ backend admin path
+        totalAmount: total ? Number(total) : undefined,
+        markPaid: !!markPaid,
+      };
+
+      const res = await apiPost('signup', payload);
+      if (!res?.ok) {
+        showToast('error', res?.error || 'Failed to sign up');
+        return;
+      }
+
+      await refreshRoster();
       setPlayers(['']);
       setPlayerOthers(['']);
-      showToast('success', 'Saved!');
-    } catch (e) {
-      showToast('error', 'Failed to sign up: ' + e.message);
-    } finally {
-      setBusy(false);
+      setTotal('');
+      setMarkPaid(false);
+
+      showToast('success', `Signed up ${selected.length} player${selected.length === 1 ? '' : 's'}`);
+      return;
     }
+
+    // Non-admin: sign up self (existing behavior)
+    const res = await apiPost('signup', { reservationId: reservation.Id });
+    if (!res?.ok) {
+      showToast('error', res?.error || 'Failed to sign up');
+      return;
+    }
+
+    await refreshRoster();
+    showToast('success', 'Signed up');
+  } catch (e) {
+    showToast('error', 'Failed to sign up: ' + (e?.message || String(e)));
+  } finally {
+    setBusy(false);
   }
+}
 
 
 async function setPaid(sheetRow, paid) {
@@ -522,7 +647,8 @@ className={`
         <button
           onClick={() => {
             if (onEditReservation) return onEditReservation(reservation);
-            alert('Edit (admin) clicked — wire onEditReservation() when ready.');
+            showToast('error', 'Edit is not wired yet.');
+
           }}
           className={`text-xs font-black uppercase tracking-widest px-3 py-1 border rounded transition-colors ${
             isProposed
@@ -583,6 +709,19 @@ className={`
               {toast.text}
             </div>
           )}
+
+
+<ConfirmModal
+  open={!!modal}
+  title={modal?.title}
+  message={modal?.message}
+  confirmText={modal?.confirmText}
+  cancelText={modal?.cancelText}
+  danger={modal?.danger}
+  onCancel={() => closeModal(false)}
+  onConfirm={() => closeModal(true)}
+/>
+
 
 
           {/* Content */}
@@ -741,9 +880,10 @@ className={`
                       href={`${VENMO_URL}?txn=pay&amount=${perPlayer}&note=Pickleball ${reservation.Date} ${reservation.Start}`}
                       target="_blank"
                       rel="noreferrer"
-                      onClick={(e) => {
-                        if (!confirmTextWarning()) e.preventDefault();
-                      }}
+                    onClick={async (e) => {
+  if (!(await confirmTextWarningAsync())) e.preventDefault();
+}}
+
                     >
                       Pay ${perPlayer} via Venmo
                     </a>
