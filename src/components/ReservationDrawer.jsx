@@ -14,6 +14,67 @@ function Spinner({ className = "h-4 w-4" }) {
   );
 }
 
+function ConfirmModal({
+  open,
+  title,
+  message,
+  confirmText = 'OK',
+  cancelText = 'Cancel',
+  onConfirm,
+  onCancel,
+  danger = false,
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+      <div
+        className="absolute inset-0 bg-slate-900/70 backdrop-blur-[2px]"
+        onMouseDown={onCancel}
+        onTouchStart={onCancel}
+        aria-hidden="true"
+      />
+
+      <div
+        className="relative w-full max-w-md rounded-xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-slate-700 dark:bg-slate-800"
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+      >
+        <div className="text-base font-bold text-slate-900 dark:text-slate-100">
+          {title}
+        </div>
+
+        <div className="mt-2 whitespace-pre-line text-sm text-slate-700 dark:text-slate-200">
+          {message}
+        </div>
+
+        <div className="mt-4 flex justify-end gap-2">
+          {cancelText ? (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+            >
+              {cancelText}
+            </button>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            className={`rounded px-3 py-1.5 text-sm font-semibold text-white ${
+              danger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+          >
+            {confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function formatDateMmmDdYyyy(dateStr) {
   // dateStr = "YYYY-MM-DD"
   const d = new Date(dateStr + 'T00:00:00');
@@ -69,6 +130,24 @@ const isScheduled = !isProposed && !isCanceled;
   }, [hoursToStart]);
 
 
+  const [modal, setModal] = useState(null);
+// modal: { title, message, confirmText, cancelText, danger, resolve }
+
+function askConfirm({ title, message, confirmText = 'OK', cancelText = 'Cancel', danger = false }) {
+  return new Promise((resolve) => {
+    setModal({ title, message, confirmText, cancelText, danger, resolve });
+  });
+}
+
+function closeModal(result) {
+  setModal((m) => {
+    if (m?.resolve) m.resolve(result);
+    return null;
+  });
+}
+
+
+
 
   const smsHref = useMemo(() => {
     const when = reservation?.Date && reservation?.Start
@@ -83,28 +162,37 @@ const isScheduled = !isProposed && !isCanceled;
   }, [reservation?.Date, reservation?.Start, reservation?.Id]);
 
 
-  function confirmTextWarning() {
-    if (!needsTextWarning) return true;
 
-    const when = reservation?.Date && reservation?.Start
-      ? `${formatDateMmmDdYyyy(reservation.Date)} ${formatTimeAmPm(reservation.Start)}`
-      : 'this reservation';
+async function confirmTextWarningAsync() {
+  if (!needsTextWarning) return true;
 
-    const ok = window.confirm(
-      `⚠️ Heads up: ${when} starts in under 30 hours.\n\n` +
+  const when = reservation?.Date && reservation?.Start
+    ? `${formatDateMmmDdYyyy(reservation.Date)} ${formatTimeAmPm(reservation.Start)}`
+    : 'this reservation';
+
+  const ok = await askConfirm({
+    title: 'Heads up',
+    message:
+      `⚠️ ${when} starts in under 30 hours.\n\n` +
       `You MUST text Jay to coordinate.\n\n` +
-      `Press OK to continue, or Cancel to go text now.`
-    );
+      `Continue anyway?`,
+    confirmText: 'Continue',
+    cancelText: 'Text Jay',
+    danger: true,
+  });
 
-    if (!ok) {
-      // User chose Cancel → open SMS composer immediately
-      window.open(smsHref, '_self');
-      return false;
-    }
-    return true;
+  if (!ok) {
+    window.open(smsHref, '_self');
+    return false;
   }
+  return true;
+}
+
+
+
 
   const myName = (user?.Name || user?.name || '').trim();
+	const myUserId = user?.UserId ?? user?.userId;
 
   const isSignedUp = useMemo(() => {
     if (!myName) return false;
@@ -112,25 +200,24 @@ const isScheduled = !isProposed && !isCanceled;
     return (roster || []).some(r => String(r.Player || '').trim().toLowerCase() === me);
   }, [roster, myName]);
 
- async function cancelRsvp(sheetRow) {
-  if (uiLocked) return;
-  if (!confirmTextWarning()) return;
 
-  const ok = window.confirm('Cancel this RSVP?');
+async function cancelRsvp(sheetRow) {
+  if (uiLocked) return;
+  if (!(await confirmTextWarningAsync())) return;
+
+  const ok = await askConfirm({
+    title: 'Cancel RSVP?',
+    message: 'Cancel this RSVP?',
+    confirmText: 'Yes, cancel',
+    cancelText: 'Keep',
+    danger: true,
+  });
   if (!ok) return;
 
   setBusy(true);
   try {
-    const res = await apiPost('cancelrsvp', {
-      reservationId: reservation.Id,
-      sheetRow, // ✅ cancels ONE specific row
-    });
-
-    if (!res?.ok) {
-      showToast('error', res?.error || 'Failed to cancel RSVP');
-      return;
-    }
-
+    const res = await apiPost('cancelrsvp', { reservationId: reservation.Id, sheetRow });
+    if (!res?.ok) return showToast('error', res?.error || 'Failed to cancel RSVP');
     await refreshRoster();
     showToast('success', 'RSVP cancelled');
   } catch (e) {
@@ -140,24 +227,23 @@ const isScheduled = !isProposed && !isCanceled;
   }
 }
 
+
 async function adminCancelRsvp(sheetRow) {
   if (uiLocked) return;
 
-  const ok = window.confirm('Cancel this player RSVP?');
+  const ok = await askConfirm({
+    title: 'Cancel player RSVP?',
+    message: 'Cancel this player RSVP?',
+    confirmText: 'Yes, cancel',
+    cancelText: 'Keep',
+    danger: true,
+  });
   if (!ok) return;
 
   setBusy(true);
   try {
-    const res = await apiPost('cancelrsvp', {
-      reservationId: reservation.Id,
-      sheetRow, // ✅ cancels ONE specific row
-    });
-
-    if (!res?.ok) {
-      showToast('error', res?.error || 'Failed to cancel RSVP');
-      return;
-    }
-
+    const res = await apiPost('cancelrsvp', { reservationId: reservation.Id, sheetRow });
+    if (!res?.ok) return showToast('error', res?.error || 'Failed to cancel RSVP');
     await refreshRoster();
     showToast('success', 'RSVP cancelled');
   } catch (e) {
@@ -219,13 +305,17 @@ async function adminCancelRsvp(sheetRow) {
   }, []);
 
   // ESC to close
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      if (e.key === 'Escape') handleClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleClose]);
+useEffect(() => {
+  const onKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      if (modal) return closeModal(false);
+      handleClose();
+    }
+  };
+  window.addEventListener('keydown', onKeyDown);
+  return () => window.removeEventListener('keydown', onKeyDown);
+}, [handleClose, modal]);
+
 
   // totalFees calc
   const totalFees = useMemo(() => {
@@ -285,28 +375,37 @@ async function adminCancelRsvp(sheetRow) {
     })();
   }, [isAdmin]);
 
-  const allNameOptions = useMemo(() => {
-    return [...(userNames || []), ...EXTRA_NAME_OPTIONS];
-  }, [userNames]);
+const allNameOptions = useMemo(() => {
+  // Non-admin: keep it private, just allow TBD/Other
+  return isAdmin ? [...(userNames || []), ...EXTRA_NAME_OPTIONS] : EXTRA_NAME_OPTIONS;
+}, [isAdmin, userNames]);
 
-  const perPlayer = useMemo(() => {
-    const amt = total ? Number(total) : totalFees;
+const perPlayer = useMemo(() => {
+  const amt = total ? Number(total) : totalFees; // per-person
+  return Math.round((amt || 0) * 100) / 100;
+}, [total, totalFees]);
 
-    let count = 1;
-    if (isAdmin) {
-      const resolved = players
-        .map((p, i) => {
-          const v = (p || '').trim();
-          if (!v) return '';
-          if (v === 'Other') return (playerOthers[i] || '').trim();
-          return v;
-        })
-        .filter(Boolean);
-      count = Math.max(resolved.length, 1);
-    }
 
-    return Math.round((amt / count) * 100) / 100;
-  }, [total, totalFees, players, playerOthers, isAdmin]);
+const signupCount = useMemo(() => {
+  const resolved = players
+    .map((p, i) => {
+      const v = (p || '').trim();
+      if (!v) return '';
+      if (v === 'Other') {
+        const other = (playerOthers[i] || '').trim();
+        return other ? other : '';
+      }
+      return v;
+    })
+    .filter(Boolean);
+
+  return isAdmin ? resolved.length : Math.max(resolved.length, 1);
+}, [players, playerOthers, isAdmin]);
+
+const suggestedTotalDue = useMemo(() => {
+  return Math.round(perPlayer * signupCount * 100) / 100;
+}, [perPlayer, signupCount]);
+
 
   const used = rosterLoading ? '…' : roster.length;
 
@@ -334,54 +433,104 @@ async function adminCancelRsvp(sheetRow) {
   }
 
 
-  async function submit() {
-    if (uiLocked) return;
-    if (!confirmTextWarning()) return;
-    setBusy(true);
+function resolveSelectedPlayers() {
+  const resolved = players
+    .map((p, i) => {
+      const v = (p || '').trim();
+      if (!v) return '';
+      if (v === 'Other') return (playerOthers[i] || '').trim();
+      return v;
+    })
+    .map((s) => (s || '').trim())
+    .filter(Boolean);
 
-    try {
-      const names = isAdmin
-        ? players
-            .map((p, i) => {
-              const v = (p || '').trim();
-              if (!v) return '';
-              if (v === 'Other') return (playerOthers[i] || '').trim();
-              return v;
-            })
-            .filter(Boolean)
-        : [];
+  // Admin: always explicit list
+  if (isAdmin) return resolved;
 
-      if (isAdmin && names.length === 0) return;
+  // Non-admin logic
+  const me = (myName || '').trim();
+  if (!me) return resolved;
 
-      if (isAdmin) {
-        const hasOtherMissing = players.some((p, i) => p === 'Other' && !(playerOthers[i] || '').trim());
-        if (hasOtherMissing) return alert('Please fill in the name for any "Other" player.');
-      }
-
-      const res = await apiPost('signup', {
-        reservationId: reservation.Id,
-        ...(isAdmin ? { players: names } : {}),
-        markPaid,
-        totalAmount: total ? Number(total) : totalFees,
-      });
-
-      if (!res.ok) {
-        showToast('error', res.error || 'Failed to sign up');
-        return;
-      }
-
-      // IMPORTANT: keep locked while roster refreshes
-      await refreshRoster();
-
-      setPlayers(['']);
-      setPlayerOthers(['']);
-      showToast('success', 'Saved!');
-    } catch (e) {
-      showToast('error', 'Failed to sign up: ' + e.message);
-    } finally {
-      setBusy(false);
-    }
+  // ✅ If already signed up, ONLY add extras
+  if (isSignedUp) {
+    return resolved.filter(
+      (n) => n.toLowerCase() !== me.toLowerCase()
+    );
   }
+
+  // First-time signup: ensure self is included once
+  if (!resolved.length) return [me];
+
+  const hasMe = resolved.some((n) => n.toLowerCase() === me.toLowerCase());
+  return hasMe ? resolved : [me, ...resolved];
+}
+
+async function submit() {
+  if (uiLocked) return;
+  if (!(await confirmTextWarningAsync())) return;
+
+  try {
+    if (!reservation?.Id) {
+      showToast('error', 'Missing reservation id');
+      return;
+    }
+
+    const selected = resolveSelectedPlayers();
+    // ❗ block incomplete "Other" rows BEFORE continuing
+    if (players.some((p, i) => p === 'Other' && !(playerOthers[i] || '').trim())) {
+      await askConfirm({
+        title: 'Missing name',
+        message: 'You selected "Other" but did not enter a name.',
+        confirmText: 'OK',
+        cancelText: '',
+      });
+      return;
+    }
+    console.log('signup selected:', selected, { players, playerOthers, isAdmin });
+
+
+    if (selected.length === 0) {
+      showToast('error', isAdmin ? 'Select at least one player.' : 'Enter at least one name (use Other).');
+      return;
+    }
+
+
+const perPersonAmount = total ? Number(total) : totalFees; // always per-person
+
+const payload = {
+  reservationId: reservation.Id,
+  players: selected,
+  perPersonAmount,                    // ALWAYS send per-person
+  markPaid: isAdmin ? !!markPaid : false,
+};
+
+console.log('signup payload:', payload);
+
+		setBusy(true);              
+    const res = await apiPost('signup', payload);
+    if (!res?.ok) {
+      showToast('error', res?.error || 'Failed to sign up');
+      return;
+    }
+
+    await refreshRoster();
+
+    setPlayers(['']);
+    setPlayerOthers(['']);
+    setTotal('');
+    if (isAdmin) setMarkPaid(false);
+
+showToast(
+  'success',
+  `Registered ${selected.length} player${selected.length === 1 ? '' : 's'}`
+);
+
+  } catch (e) {
+    showToast('error', 'Failed to sign up: ' + (e?.message || String(e)));
+  } finally {
+    setBusy(false);
+  }
+}
 
 
 async function setPaid(sheetRow, paid) {
@@ -522,7 +671,8 @@ className={`
         <button
           onClick={() => {
             if (onEditReservation) return onEditReservation(reservation);
-            alert('Edit (admin) clicked — wire onEditReservation() when ready.');
+            showToast('error', 'Edit is not wired yet.');
+
           }}
           className={`text-xs font-black uppercase tracking-widest px-3 py-1 border rounded transition-colors ${
             isProposed
@@ -585,6 +735,19 @@ className={`
           )}
 
 
+<ConfirmModal
+  open={!!modal}
+  title={modal?.title}
+  message={modal?.message}
+  confirmText={modal?.confirmText}
+  cancelText={modal?.cancelText}
+  danger={modal?.danger}
+  onCancel={() => closeModal(false)}
+  onConfirm={() => closeModal(true)}
+/>
+
+
+
           {/* Content */}
           <div className="px-4 py-4 pb-24 text-slate-900 dark:text-slate-100">
             {!isProposed && (
@@ -608,10 +771,9 @@ className={`
             )}
 
             <div className={`mt-4 ${panelClass}`}>
-              <div className="font-medium mb-2 text-slate-900 dark:text-slate-100">Sign up</div>
+              <div className="font-medium mb-2 text-slate-900 dark:text-slate-100">Register</div>
 
-              {isAdmin &&
-                players.map((p, i) => {
+              { players.map((p, i) => {
                   const isOther = p === 'Other';
 
                   return (
@@ -633,7 +795,8 @@ className={`
                             }
                           }}
                         >
-                          <option value="">Select player…</option>
+                    <option value="">{isAdmin ? 'Select player…' : 'Add person…'}</option>
+
                           {allNameOptions.map((name) => (
                             <option key={name} value={name}>
                               {name}
@@ -699,14 +862,17 @@ className={`
 
               {!isProposed && (
                 <div className="flex gap-2 items-center mb-2 flex-wrap">
-                  <label className={`text-sm ${subtleTextClass}`}>Total you’ll pay now (optional):</label>
-                  <input
-                    className={`${inputClass} w-28`}
-                    placeholder={String(totalFees)}
-                    value={total}
-                    onChange={(e) => setTotal(e.target.value)}
-                  />
-                  <span className="text-sm text-slate-500 dark:text-slate-300">= ~ ${perPlayer}/player</span>
+                <label className={`text-sm ${subtleTextClass}`}>Per-player amount (optional):</label>
+<input
+  className={`${inputClass} w-28`}
+  placeholder={String(totalFees)}
+  value={total}
+  onChange={(e) => setTotal(e.target.value)}
+/>
+<span className="text-sm text-slate-500 dark:text-slate-300">
+  ${perPlayer} each · {signupCount} player{signupCount === 1 ? '' : 's'} · total ${suggestedTotalDue}
+</span>
+
                 </div>
               )}
 
@@ -726,26 +892,30 @@ className={`
                   disabled={uiLocked}
                 >
                   {uiLocked && <Spinner />}
-                  {uiLocked ? 'Updating…' : (isProposed ? 'Sign up for proposal' : 'Submit sign-up')}
+                  {uiLocked ? 'Updating…' : (isProposed ? 'Sign up for proposal' : 'Register')}
                 </button>
                 
                 {!isProposed && (
                   uiLocked ? (
                     <span className="rounded px-4 py-2 font-semibold bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300 cursor-not-allowed">
-                      Pay ${perPlayer} via Venmo
+                    Pay ${suggestedTotalDue} via Venmo
+
                     </span>
                   ) : (
                     <a
                       className="rounded px-4 py-2 font-semibold bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors
                                  dark:bg-indigo-500/15 dark:text-indigo-200 dark:hover:bg-indigo-500/25"
-                      href={`${VENMO_URL}?txn=pay&amount=${perPlayer}&note=Pickleball ${reservation.Date} ${reservation.Start}`}
+                    href={`${VENMO_URL}?txn=pay&amount=${suggestedTotalDue}&note=Pickleball ${reservation.Date} ${reservation.Start}`}
+
                       target="_blank"
                       rel="noreferrer"
-                      onClick={(e) => {
-                        if (!confirmTextWarning()) e.preventDefault();
-                      }}
+                    onClick={async (e) => {
+  if (!(await confirmTextWarningAsync())) e.preventDefault();
+}}
+
                     >
-                      Pay ${perPlayer} via Venmo
+                      Pay ${suggestedTotalDue} via Venmo
+
                     </a>
                   )
                 )}
@@ -794,10 +964,16 @@ className={`
 
 
 {!rosterLoading && roster.map((r) => {
+
+
+  const rowUserId = r.UserId ?? r.userId;
+
   const isMine =
     !isAdmin &&
-    myName &&
-    String(r.Player || '').trim().toLowerCase() === myName.toLowerCase();
+	  myUserId != null &&
+		rowUserId != null &&
+		String(rowUserId) === String(myUserId);
+			
 
   return (
     <tr

@@ -619,67 +619,90 @@ function listAttendance_(e, ctx) {
 }
 
 function signup_(payload, ctx) {
-  if (!payload || !payload.reservationId)
-    return { ok: false, error: 'bad_request' };
+  if (!payload || !payload.reservationId) return { ok: false, error: 'bad_request' };
 
   var res = findReservation_(payload.reservationId);
   if (!res) return { ok: false, error: 'reservation_not_found' };
 
-  var attendees = readTable_(sheetByName(ATTENDANCE_SHEET_NAME));
+  var sh = sheetByName(ATTENDANCE_SHEET_NAME);
+  var attendees = readTable_(sh);
+  var hasUserId = idxHasHeader_(attendees.header, 'UserId');
 
-  // Determine who is being signed up
+  // ---- Determine players to add ----
   var players = [];
 
   if (ctx.role === 'admin') {
-    if (!payload.players || payload.players.length === 0) return { ok: false, error: 'bad_request' };
+    if (!payload.players || !payload.players.length) return { ok: false, error: 'bad_request' };
     players = payload.players.map(function(p){ return String(p || '').trim(); }).filter(Boolean);
+    if (!players.length) return { ok: false, error: 'bad_request' };
   } else {
-    // member/guest can only sign up themselves
-    players = [String((ctx.user && ctx.user.Name) || '').trim()];
+    var myName = String((ctx.user && ctx.user.Name) || '').trim();
+    if (!myName) return { ok: false, error: 'missing_user_name' };
 
-    if (!players[0]) return { ok: false, error: 'missing_user_name' };
+    var incoming = (payload.players && payload.players.length)
+      ? payload.players.map(function(p){ return String(p || '').trim(); })
+      : [];
+
+    if (!incoming.length) incoming = [myName];
+
+    // Ensure user is included at least once
+    var hasMe = incoming.some(function(p){ return p && p.toLowerCase() === myName.toLowerCase(); });
+    if (!hasMe) incoming.unshift(myName);
+
+    // Replace blanks with myName
+    players = incoming.map(function(p){ return p ? p : myName; }).filter(Boolean);
   }
 
-  var totalFees = res.BaseFee + sum_(res.Fees.map(function(f){ return Number(f.Amount)||0; }));
-  var totalAmount = payload.totalAmount ? Number(payload.totalAmount) : totalFees;
-  var perPlayer = round2_(totalAmount / players.length);
+  // ---- Per-person pricing ----
+  var perPerson = Number(res.BaseFee) || 0;
+  perPerson += sum_((res.Fees || []).map(function(f){ return Number(f.Amount) || 0; }));
+  perPerson = round2_(perPerson);
 
-  var rowsToAppend = players.map(function(p){
-    var row = {};
-    attendees.header.forEach(function(h){ row[h] = ''; });
+  // Optional overrides:
+  // - perPersonAmount is explicit per-person number
+  // - totalAmount is treated as per-person for backward compatibility
+  if (payload && payload.perPersonAmount !== undefined && payload.perPersonAmount !== null && payload.perPersonAmount !== '') {
+    perPerson = round2_(Number(payload.perPersonAmount) || perPerson);
+  } else if (payload && payload.totalAmount !== undefined && payload.totalAmount !== null && payload.totalAmount !== '') {
+    perPerson = round2_(Number(payload.totalAmount) || perPerson);
+  }
 
-    row['Date'] = res.Date;
-    row['Hours'] = DEFAULT_HOURS;
-    row['Player Name'] = p;
+  // ---- Build rows (2D array) ----
+  var rows = players.map(function(p){
+    var rowObj = {};
+    attendees.header.forEach(function(h){ rowObj[h] = ''; });
 
-    // Bind row to userId when possible
-    if (idxHasHeader_(attendees.header, 'UserId')) {
+    rowObj['Date'] = res.Date;
+    rowObj['Hours'] = DEFAULT_HOURS;
+    rowObj['Player Name'] = p;
+    rowObj['Present (1/0)'] = 1;
+    rowObj['Charge (auto)'] = perPerson;
+    rowObj['PAID'] = (ctx.role === 'admin' && payload.markPaid) ? 1 : 0;
+    rowObj['ReservationId'] = res.Id;
+
+    if (hasUserId) {
       if (ctx.role !== 'admin') {
-        // member/guest signing themselves
-        row['UserId'] = ctx.userId;
+        rowObj['UserId'] = ctx.userId; // bind ALL rows to the submitter
       } else {
-        // admin adding by name: try to match a user by Name
         var u = findUserByName_(p);
-        row['UserId'] = (u && u.Active) ? u.UserId : '';
+        rowObj['UserId'] = (u && u.Active) ? u.UserId : '';
       }
     }
 
-    row['Present (1/0)'] = 1;
-    row['Charge (auto)'] = perPlayer;
-
-    // Only admin can mark paid server-side
-    row['PAID'] = (ctx.role === 'admin' && payload.markPaid) ? 1 : 0;
-
-    row['ReservationId'] = res.Id;
-    return attendees.header.map(function(h){ return row[h]; });
+    // Convert to row array in header order
+    return attendees.header.map(function(h){ return rowObj[h]; });
   });
 
-  if (rowsToAppend.length > 0) {
-    var sh = sheetByName(ATTENDANCE_SHEET_NAME);
-    sh.getRange(sh.getLastRow()+1, 1, rowsToAppend.length, attendees.header.length).setValues(rowsToAppend);
+  if (rows.length) {
+    sh.getRange(sh.getLastRow() + 1, 1, rows.length, attendees.header.length).setValues(rows);
   }
 
-  return { ok: true, perPlayer: perPlayer };
+  return {
+    ok: true,
+    perPerson: perPerson,
+    count: players.length,
+    totalDue: round2_(perPerson * players.length)
+  };
 }
 
 function unrsvp_(payload, ctx) {
