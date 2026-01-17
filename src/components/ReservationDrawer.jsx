@@ -192,6 +192,7 @@ async function confirmTextWarningAsync() {
 
 
   const myName = (user?.Name || user?.name || '').trim();
+	const myUserId = user?.UserId ?? user?.userId;
 
   const isSignedUp = useMemo(() => {
     if (!myName) return false;
@@ -443,15 +444,21 @@ function resolveSelectedPlayers() {
     .map((s) => (s || '').trim())
     .filter(Boolean);
 
-  if (isAdmin) {
-    // Admin MUST select explicit names
-    return resolved;
-  }
+  // Admin: always explicit list
+  if (isAdmin) return resolved;
 
-  // Non-admin: always include self at least once
+  // Non-admin logic
   const me = (myName || '').trim();
   if (!me) return resolved;
 
+  // ✅ If already signed up, ONLY add extras
+  if (isSignedUp) {
+    return resolved.filter(
+      (n) => n.toLowerCase() !== me.toLowerCase()
+    );
+  }
+
+  // First-time signup: ensure self is included once
   if (!resolved.length) return [me];
 
   const hasMe = resolved.some((n) => n.toLowerCase() === me.toLowerCase());
@@ -462,7 +469,6 @@ async function submit() {
   if (uiLocked) return;
   if (!(await confirmTextWarningAsync())) return;
 
-  setBusy(true);
   try {
     if (!reservation?.Id) {
       showToast('error', 'Missing reservation id');
@@ -470,6 +476,16 @@ async function submit() {
     }
 
     const selected = resolveSelectedPlayers();
+    // ❗ block incomplete "Other" rows BEFORE continuing
+    if (players.some((p, i) => p === 'Other' && !(playerOthers[i] || '').trim())) {
+      await askConfirm({
+        title: 'Missing name',
+        message: 'You selected "Other" but did not enter a name.',
+        confirmText: 'OK',
+        cancelText: '',
+      });
+      return;
+    }
     console.log('signup selected:', selected, { players, playerOthers, isAdmin });
 
 
@@ -477,23 +493,6 @@ async function submit() {
       showToast('error', isAdmin ? 'Select at least one player.' : 'Enter at least one name (use Other).');
       return;
     }
-
-
-const hasOtherMissing = players.some((p, i) => {
-  if (p !== 'Other') return false;
-  // only block if user actively chose Other in that row
-  return !(playerOthers[i] || '').trim();
-});
-
-if (hasOtherMissing) {
-  await askConfirm({
-    title: 'Missing name',
-    message: 'You selected "Other" but did not enter a name.',
-    confirmText: 'OK',
-    cancelText: '',
-  });
-  return;
-}
 
 
 const perPersonAmount = total ? Number(total) : totalFees; // always per-person
@@ -507,6 +506,7 @@ const payload = {
 
 console.log('signup payload:', payload);
 
+		setBusy(true);              
     const res = await apiPost('signup', payload);
     if (!res?.ok) {
       showToast('error', res?.error || 'Failed to sign up');
@@ -520,7 +520,11 @@ console.log('signup payload:', payload);
     setTotal('');
     if (isAdmin) setMarkPaid(false);
 
-    showToast('success', `Signed up ${selected.length} player${selected.length === 1 ? '' : 's'}`);
+showToast(
+  'success',
+  `Registered ${selected.length} player${selected.length === 1 ? '' : 's'}`
+);
+
   } catch (e) {
     showToast('error', 'Failed to sign up: ' + (e?.message || String(e)));
   } finally {
@@ -767,7 +771,7 @@ className={`
             )}
 
             <div className={`mt-4 ${panelClass}`}>
-              <div className="font-medium mb-2 text-slate-900 dark:text-slate-100">Sign up</div>
+              <div className="font-medium mb-2 text-slate-900 dark:text-slate-100">Register</div>
 
               { players.map((p, i) => {
                   const isOther = p === 'Other';
@@ -888,7 +892,7 @@ className={`
                   disabled={uiLocked}
                 >
                   {uiLocked && <Spinner />}
-                  {uiLocked ? 'Updating…' : (isProposed ? 'Sign up for proposal' : 'Submit sign-up')}
+                  {uiLocked ? 'Updating…' : (isProposed ? 'Sign up for proposal' : 'Register')}
                 </button>
                 
                 {!isProposed && (
@@ -960,10 +964,16 @@ className={`
 
 
 {!rosterLoading && roster.map((r) => {
+
+
+  const rowUserId = r.UserId ?? r.userId;
+
   const isMine =
     !isAdmin &&
-    myName &&
-    String(r.Player || '').trim().toLowerCase() === myName.toLowerCase();
+	  myUserId != null &&
+		rowUserId != null &&
+		String(rowUserId) === String(myUserId);
+			
 
   return (
     <tr
