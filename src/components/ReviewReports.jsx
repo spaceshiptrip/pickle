@@ -11,16 +11,49 @@ function money(n) {
   return v.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
 }
 
+/* Added: same spinner style as ReservationDrawer.jsx */
+function Spinner({ className = "h-4 w-4" }) {
+  return (
+    <span
+      className={`inline-block animate-spin rounded-full border-2 border-current border-t-transparent ${className}`}
+      aria-hidden="true"
+    />
+  );
+}
+
+/* Added: small helper for red/green balance styling */
+function balanceColorClass(n) {
+  const v = Number(n || 0);
+  if (Math.abs(v) <= 0.0001) return '';
+  return v > 0
+    ? 'text-rose-700 dark:text-rose-300'
+    : 'text-emerald-700 dark:text-emerald-300';
+}
+
 export default function ReviewReports({ onClose }) {
-  const [preset, setPreset] = useState('30d'); // 'week' | 'month' | '30d'
+  const [preset, setPreset] = useState('30d'); // 'today' | 'week' | 'month' | '30d' | 'range'
   const [grouped, setGrouped] = useState(true);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [data, setData] = useState(null);
 
+  /* Added: custom range state (only used when preset === 'range') */
+  const [rangeFrom, setRangeFrom] = useState(() => ymd(new Date()));
+  const [rangeTo, setRangeTo] = useState(() => ymd(new Date()));
+
   const range = useMemo(() => {
     const today = new Date();
     const start = new Date(today);
+
+    if (preset === 'today') {
+      return { from: ymd(today), to: ymd(today) };
+    }
+
+    if (preset === 'range') {
+      const from = (rangeFrom || '').trim() || ymd(today);
+      const to = (rangeTo || '').trim() || ymd(today);
+      return { from, to };
+    }
 
     if (preset === 'week') {
       // start of week (Mon)
@@ -35,7 +68,7 @@ export default function ReviewReports({ onClose }) {
     }
 
     return { from: ymd(start), to: ymd(today) };
-  }, [preset]);
+  }, [preset, rangeFrom, rangeTo]);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +90,8 @@ export default function ReviewReports({ onClose }) {
 
   const totals = data?.totals || { plays: 0, charges: 0, paid: 0, balance: 0 };
   const rows = data?.byReservation || [];
+
+  const balanceClass = balanceColorClass(totals.balance);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -84,9 +119,11 @@ export default function ReviewReports({ onClose }) {
         <div className="p-4 space-y-4">
           {/* Presets */}
           <div className="flex flex-wrap gap-2">
+            <PresetChip label="Today" active={preset === 'today'} onClick={() => setPreset('today')} />
             <PresetChip label="This week" active={preset === 'week'} onClick={() => setPreset('week')} />
             <PresetChip label="This month" active={preset === 'month'} onClick={() => setPreset('month')} />
             <PresetChip label="Last 30 days" active={preset === '30d'} onClick={() => setPreset('30d')} />
+            <PresetChip label="Range" active={preset === 'range'} onClick={() => setPreset('range')} />
 
             <label className="ml-auto flex items-center gap-2 text-sm select-none">
               <input
@@ -98,6 +135,31 @@ export default function ReviewReports({ onClose }) {
             </label>
           </div>
 
+          {/* Range inputs */}
+          {preset === 'range' && (
+            <div className="flex flex-wrap gap-2 items-end">
+              <div>
+                <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">From</div>
+                <input
+                  type="date"
+                  value={rangeFrom}
+                  onChange={(e) => setRangeFrom(e.target.value)}
+                  className="rounded border px-2 py-1 text-sm bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"
+                />
+              </div>
+
+              <div>
+                <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">To</div>
+                <input
+                  type="date"
+                  value={rangeTo}
+                  onChange={(e) => setRangeTo(e.target.value)}
+                  className="rounded border px-2 py-1 text-sm bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"
+                />
+              </div>
+            </div>
+          )}
+
           {err && (
             <div className="p-3 rounded-lg border border-red-300 bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200 dark:border-red-900">
               {err}
@@ -106,7 +168,7 @@ export default function ReviewReports({ onClose }) {
 
           {/* Summary cards */}
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-            <Card title="Balance" value={money(totals.balance)} />
+            <Card title="Balance" value={money(totals.balance)} valueClassName={balanceClass} />
             <Card title="Charges" value={money(totals.charges)} />
             <Card title="Paid" value={money(totals.paid)} />
             <Card title="Plays" value={String(totals.plays)} />
@@ -118,9 +180,7 @@ export default function ReviewReports({ onClose }) {
               {grouped ? 'By reservation' : 'Details'}
             </div>
 
-            {loading ? (
-              <div className="p-4 text-sm text-slate-600 dark:text-slate-300">Loading…</div>
-            ) : grouped ? (
+            {grouped ? (
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 dark:bg-slate-950">
                   <tr className="text-left">
@@ -133,7 +193,16 @@ export default function ReviewReports({ onClose }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.length === 0 ? (
+                  {loading ? (
+                    <tr>
+                      <td colSpan={6} className="p-4 text-center text-slate-500 dark:text-slate-400">
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner className="h-4 w-4" />
+                          Loading…
+                        </span>
+                      </td>
+                    </tr>
+                  ) : rows.length === 0 ? (
                     <tr><td className="p-3 text-slate-600 dark:text-slate-300" colSpan={6}>No activity in this range.</td></tr>
                   ) : rows.map((r) => (
                     <tr key={r.reservationId} className="border-t border-slate-200 dark:border-slate-800">
@@ -144,7 +213,11 @@ export default function ReviewReports({ onClose }) {
                       </td>
                       <td className="p-2 whitespace-nowrap">{money(r.charges)}</td>
                       <td className="p-2 whitespace-nowrap">{money(r.paid)}</td>
-                      <td className="p-2 whitespace-nowrap font-semibold">{money(r.balance)}</td>
+
+                      {/* Changed: Outstanding colored red (owed) / green (credit) when non-zero */}
+                      <td className={`p-2 whitespace-nowrap font-semibold ${balanceColorClass(r.balance)}`}>
+                        {money(r.balance)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -181,11 +254,14 @@ function PresetChip({ label, active, onClick }) {
   );
 }
 
-function Card({ title, value }) {
+/* Changed: Card now accepts optional valueClassName (doesn't affect other cards) */
+function Card({ title, value, valueClassName = '' }) {
   return (
     <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3">
       <div className="text-xs text-slate-600 dark:text-slate-300">{title}</div>
-      <div className="text-lg font-semibold">{value}</div>
+      <div className={`text-lg font-semibold ${valueClassName}`}>{value}</div>
     </div>
   );
 }
+
+
