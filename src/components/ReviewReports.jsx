@@ -43,7 +43,7 @@ export default function ReviewReports({ onClose }) {
       setLoading(true);
       setErr('');
       try {
-        const res = await apiGet('reportsummary', range);
+        const res = await apiGet({ action: 'reportsummary', ...range });
         if (!cancelled) setData(res);
       } catch (e) {
         if (!cancelled) setErr(e?.message || 'Failed to load reports');
