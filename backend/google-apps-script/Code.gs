@@ -617,6 +617,13 @@ function listAttendance_(e, ctx) {
 
   for (var i = 0; i < at.rows.length; i++) {
     var r = at.rows[i];
+    var isCanceled = false;
+    if (idx["ReservationId"] !== undefined) {
+      var rid = String(r[idx["ReservationId"]] || "");
+      isCanceled =
+        rid &&
+        (resStatus[rid] === "canceled" );
+    }
 
     // Filter: reservationId OR month OR all
     if (resId) {
@@ -630,13 +637,7 @@ function listAttendance_(e, ctx) {
       if (ds !== month) continue;
     }
 
-    // NEW: skip attendance for cancelled reservations
-    if (idx["ReservationId"] !== undefined) {
-      var rid = String(r[idx["ReservationId"]] || "");
-      if (rid && resStatus[rid] === "cancelled") continue;
-    }
-
-    // Skip cancelled rows (robust: handles 0, "0", false, "")
+    // Skip canceled rows (robust: handles 0, "0", false, "")
     if (idx["Present (1/0)"] !== undefined) {
       var presentRaw = r[idx["Present (1/0)"]];
       if (Number(presentRaw) === 0) continue;
@@ -663,6 +664,12 @@ function listAttendance_(e, ctx) {
 
       // your sheet uses 1/0; keep same behavior
       paidVal = Number(r[idx["PAID"]]) || 0;
+
+      // CANCELED = no charge, credit preserved
+      if (isCanceled) {
+        chargeVal = 0;
+      }
+
     }
 
     out.push({
@@ -1253,6 +1260,7 @@ function reportSummary_(sessionUser, params) {
 
   var headers = values[0];
   var idx = indexMap_(headers);
+  var resStatus = reservationStatusById_();
 
   // Expected headers:
   // Date, Hours, Player Name, UserId, Present (1/0), Charge (auto), PAID, ReservationId
@@ -1272,17 +1280,31 @@ function reportSummary_(sessionUser, params) {
 
     var dt = parseSheetDate_(r[idx["Date"]]);
     if (!dt) continue;
-
     if (dt < from || dt > to) continue;
 
-    var charge = num_(r[idx["Charge (auto)"]] || r[idx["Charge"]] || 0);
+    var reservationId = String(r[idx["ReservationId"]] || "").trim();
+    var status = String(resStatus[reservationId] || "reserved")
+      .toLowerCase()
+      .trim();
+
+    // ✅ If proposed, do not show it at all (never happened)
+    if (status === "proposed") continue;
+
+    var rawCharge = num_(r[idx["Charge (auto)"]] || r[idx["Charge"]] || 0);
     var paid = num_(r[idx["PAID"]] || 0);
 
-    totals.plays += 1;
+    // ✅ If canceled, payment is not required:
+    //    - charge becomes 0
+    //    - paid becomes credit (balance negative)
+    var charge = status === "canceled" ? 0 : rawCharge;
+
+    // Totals:
+    // - plays: count only non-canceled actual plays (reserved)
+    if (status !== "canceled") totals.plays += 1;
+
     totals.charges += charge;
     totals.paid += paid;
 
-    var reservationId = String(r[idx["ReservationId"]] || "");
     var playerName = String(
       r[idx["Player Name"]] || r[idx["PlayerName"]] || "",
     ).trim();
@@ -1291,6 +1313,7 @@ function reportSummary_(sessionUser, params) {
       byRes[reservationId] = {
         reservationId: reservationId,
         date: formatYmd_(dt, tz),
+        status: status, // ✅ NEW for UI
         players: [],
         charges: 0,
         paid: 0,
@@ -1835,6 +1858,36 @@ function normalizeVisibility_(v) {
   return "member";
 }
 
+function reservationStatusById_() {
+  var sh = getSheet_(RESERVATIONS_SHEET_NAME);
+  var values = sh.getDataRange().getValues();
+  if (values.length < 2) return {};
+
+  var headers = values[0];
+  var idx = indexMap_(headers);
+  if (idx["Id"] == null) return {};
+
+  var statusIdx = idx["Status"];
+  var out = {};
+
+  for (var r = 1; r < values.length; r++) {
+    var id = String(values[r][idx["Id"]] || "").trim();
+    if (!id) continue;
+
+    var st =
+      statusIdx != null
+        ? String(values[r][statusIdx] || "")
+            .toLowerCase()
+            .trim()
+        : "reserved";
+
+    // normalize
+    if (!st) st = "reserved";
+    out[id] = st;
+  }
+  return out;
+}
+
 /** -------- Email sending -------- */
 function sendMagicLinkEmail_(toEmail, token) {
   // Option A (recommended): link goes to your site and your frontend calls auth.consumeToken
@@ -2014,9 +2067,6 @@ function sum_(arr) {
   return arr.reduce(function (a, b) {
     return a + (Number(b) || 0);
   }, 0);
-}
-function round2_(n) {
-  return Math.round((Number(n) || 0) * 100) / 100;
 }
 
 /** ---- Setup note (one-time) ----
