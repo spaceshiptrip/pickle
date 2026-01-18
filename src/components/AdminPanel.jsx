@@ -494,7 +494,7 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                     className={`border rounded px-2 py-1 w-full font-bold border-slate-300
                                           dark:border-slate-600 dark:bg-slate-900
                                           ${
-                                            form.Status === "cancelled"
+                                            form.Status === "canceled"
                                               ? "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
                                               : form.Status === "proposed"
                                                 ? "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
@@ -507,7 +507,7 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                   >
                     <option value="reserved">✅ RESERVED (Confirmed)</option>
                     <option value="proposed">⏳ PROPOSED (Draft)</option>
-                    <option value="cancelled">🚫 CANCELLED</option>
+                    <option value="canceled">🚫 CANCELED</option>
                   </select>
                 </div>
 
@@ -515,12 +515,12 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                   <button
                     type="button"
                     className={`w-full border rounded px-3 py-2 font-extrabold tracking-wide transition-colors ${
-                      form.Status === "cancelled"
+                      form.Status === "canceled"
                         ? "bg-emerald-600 text-white hover:bg-emerald-700"
                         : "bg-rose-600 text-white hover:bg-rose-700"
                     }`}
                     onClick={() => {
-                      if (form.Status === "cancelled") {
+                      if (form.Status === "canceled") {
                         setForm({
                           ...form,
                           Status: preCancelStatus || "reserved",
@@ -528,18 +528,18 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                         setPreCancelStatus(null);
                       } else {
                         setPreCancelStatus(form.Status);
-                        setForm({ ...form, Status: "cancelled" });
+                        setForm({ ...form, Status: "canceled" });
                       }
                     }}
                   >
-                    {form.Status === "cancelled"
+                    {form.Status === "canceled"
                       ? "RESUME Event"
                       : "CANCEL Event"}
                   </button>
 
-                  {form.Status === "cancelled" && (
+                  {form.Status === "canceled" && (
                     <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      Cancelled sessions are excluded from reports/charges.
+                      Canceled sessions are excluded from reports/charges.
                     </div>
                   )}
                 </div>
