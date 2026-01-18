@@ -11,7 +11,6 @@ import SettingsView from "./components/SettingsView";
 import { popPostLoginRedirect } from "./utils/postLoginRedirect";
 import ReviewReports from "./components/ReviewReports.jsx";
 
-
 const THEME_KEY = "pickle_theme"; // 'light' | 'dark'
 
 function getInitialTheme() {
@@ -226,9 +225,14 @@ export default function App() {
             </button>
 
             <button
+              type="button"
               onClick={() => setShowReports(true)}
-              className="px-3 py-1.5 rounded-lg border text-sm hover:opacity-90
-             border-slate-300 dark:border-slate-700"
+              className="px-3 py-2 rounded-xl text-xs font-extrabold
+             bg-indigo-100 hover:bg-indigo-200
+             dark:bg-indigo-500/20 dark:hover:bg-indigo-500/30 dark:text-slate-100
+             transition"
+              aria-label="Reports"
+              title="Reports"
             >
               Reports
             </button>
