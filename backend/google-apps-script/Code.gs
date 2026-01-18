@@ -72,7 +72,9 @@ function doGet(e) {
   }
 
   if (action === "reportsummary") {
-    return json_(reportSummary_(sessionUser, params));
+    var ctxR = requireAuth_(e, null);
+    requireRole_(ctxR, ["admin", "memberplus", "member", "guest"]);
+    return json_(reportSummary_(ctxR.user, e.parameter || {}));
   }
 
   return json_({ ok: false, error: "unknown_action" }, 400);
@@ -650,9 +652,17 @@ function listAttendance_(e, ctx) {
 
     // Privacy: only admin or self sees Charge/PAID
     if (isAdmin || isSelf) {
-      chargeVal = Number(r[idx["Charge (auto)"]]) || 0;
+      chargeVal =
+        Number(
+          r[
+            idx["Charge (auto)"] !== undefined
+              ? idx["Charge (auto)"]
+              : idx["Charge"]
+          ],
+        ) || 0;
+
       // your sheet uses 1/0; keep same behavior
-      paidVal = String(r[idx["PAID"]]) === "1";
+      paidVal = Number(r[idx["PAID"]]) || 0;
     }
 
     out.push({
@@ -761,7 +771,8 @@ function signup_(payload, ctx) {
     rowObj["Player Name"] = p;
     rowObj["Present (1/0)"] = 1;
     rowObj["Charge (auto)"] = perPerson;
-    rowObj["PAID"] = ctx.role === "admin" && payload.markPaid ? 1 : 0;
+    rowObj["PAID"] = ctx.role === "admin" && payload.markPaid ? perPerson : 0;
+
     rowObj["ReservationId"] = res.Id;
 
     if (hasUserId) {
@@ -851,6 +862,9 @@ function markPaid_(payload) {
   if (idx["PAID"] === undefined)
     return { ok: false, error: "missing_paid_column" };
 
+  var chargeCol =
+    idx["Charge (auto)"] !== undefined ? idx["Charge (auto)"] : idx["Charge"];
+
   // ✅ Preferred: direct update by sheetRow (unambiguous)
   var sheetRow = Number(payload.sheetRow || 0);
   if (sheetRow && sheetRow >= 2) {
@@ -867,7 +881,12 @@ function markPaid_(payload) {
       }
     }
 
-    sh.getRange(sheetRow, idx["PAID"] + 1).setValue(payload.paid ? 1 : 0);
+    var charge =
+      chargeCol !== undefined
+        ? Number(at.rows[tableRowIndex][chargeCol]) || 0
+        : 0;
+
+    sh.getRange(sheetRow, idx["PAID"] + 1).setValue(payload.paid ? charge : 0);
     return { ok: true };
   }
 
@@ -883,7 +902,7 @@ function markPaid_(payload) {
       String(r[idx["Player Name"]]).trim().toLowerCase() ===
         String(payload.player).trim().toLowerCase() &&
       (idx["Present (1/0)"] === undefined ||
-        Number(r[idx["Present (1/0)"]]) !== 0) // only active rows
+        Number(r[idx["Present (1/0)"]]) !== 0)
     ) {
       matches.push(i);
     }
@@ -893,7 +912,13 @@ function markPaid_(payload) {
   if (matches.length > 1)
     return { ok: false, error: "ambiguous_match_use_sheetrow" };
 
-  sh.getRange(matches[0] + 2, idx["PAID"] + 1).setValue(payload.paid ? 1 : 0);
+  var rowIndex = matches[0];
+  var charge =
+    chargeCol !== undefined ? Number(at.rows[rowIndex][chargeCol]) || 0 : 0;
+
+  sh.getRange(rowIndex + 2, idx["PAID"] + 1).setValue(
+    payload.paid ? charge : 0,
+  );
   return { ok: true };
 }
 
@@ -1239,27 +1264,27 @@ function reportSummary_(sessionUser, params) {
   for (var i = 0; i < rows.length; i++) {
     var r = rows[i];
 
-    var rUserId = String(r[idx.UserId] || "");
+    var rUserId = String(r[idx["UserId"]] || "");
     if (rUserId !== userId) continue;
 
-    var present = Number(r[idx["Present (1/0)"]] || r[idx.Present] || 0);
+    var present = Number(r[idx["Present (1/0)"]] || r[idx["Present"]] || 0);
     if (present !== 1) continue;
 
-    var dt = parseSheetDate_(r[idx.Date]);
+    var dt = parseSheetDate_(r[idx["Date"]]);
     if (!dt) continue;
 
     if (dt < from || dt > to) continue;
 
-    var charge = num_(r[idx["Charge (auto)"]] || r[idx.Charge] || 0);
-    var paid = num_(r[idx.PAID] || 0);
+    var charge = num_(r[idx["Charge (auto)"]] || r[idx["Charge"]] || 0);
+    var paid = num_(r[idx["PAID"]] || 0);
 
     totals.plays += 1;
     totals.charges += charge;
     totals.paid += paid;
 
-    var reservationId = String(r[idx.ReservationId] || "");
+    var reservationId = String(r[idx["ReservationId"]] || "");
     var playerName = String(
-      r[idx["Player Name"]] || r[idx.PlayerName] || "",
+      r[idx["Player Name"]] || r[idx["PlayerName"]] || "",
     ).trim();
 
     if (!byRes[reservationId]) {
@@ -1310,7 +1335,7 @@ function reportSummary_(sessionUser, params) {
     },
     byReservation: byReservation,
   };
-}
+} /* reportSummary_ */
 
 /*** helpers (add if you don't already have equivalents) ***/
 function indexMap_(headers) {
@@ -1338,18 +1363,30 @@ function round2_(n) {
 // Accept Date objects, serials, or strings like "1/16/2026"
 function parseSheetDate_(v) {
   if (!v && v !== 0) return null;
-  if (v instanceof Date)
+
+  // Already a Date
+  if (v instanceof Date) {
     return new Date(v.getFullYear(), v.getMonth(), v.getDate());
+  }
+
   // Sheets serial date
   if (typeof v === "number") {
-    var d = new Date(Math.round((v - 25569) * 86400 * 1000)); // Excel epoch
+    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
     return new Date(d.getFullYear(), d.getMonth(), d.getDate());
   }
-  // String date
-  var s = String(v).trim();
-  var d2 = new Date(s);
-  if (!isNaN(d2.getTime()))
-    return new Date(d2.getFullYear(), d2.getMonth(), d2.getDate());
+
+  // MM/DD/YYYY or M/D/YYYY
+  if (typeof v === "string") {
+    const m = v.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) return null;
+
+    const month = Number(m[1]) - 1;
+    const day = Number(m[2]);
+    const year = Number(m[3]);
+
+    return new Date(year, month, day);
+  }
+
   return null;
 }
 
@@ -1362,13 +1399,6 @@ function parseYmd_(s) {
 
 function formatYmd_(d, tz) {
   return Utilities.formatDate(d, tz, "yyyy-MM-dd");
-}
-
-// You likely already have this:
-function json_(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
-    ContentService.MimeType.JSON,
-  );
 }
 
 function idxHasHeader_(header, colName) {
@@ -1922,6 +1952,51 @@ function migrateUsersToLoginHash_() {
   }
 
   Logger.log("Done migrating LoginHash.");
+}
+
+function migratePaidFlagToAmount_() {
+  var sh = SpreadsheetApp.getActive().getSheetByName(ATTENDANCE_SHEET_NAME);
+  if (!sh) throw new Error("Missing sheet: " + ATTENDANCE_SHEET_NAME);
+
+  var range = sh.getDataRange();
+  var values = range.getValues();
+  if (values.length < 2) return;
+
+  var headers = values[0];
+  var idx = indexMap_(headers);
+
+  var paidCol = idx["PAID"];
+  var chargeCol =
+    idx["Charge (auto)"] !== undefined ? idx["Charge (auto)"] : idx["Charge"];
+
+  if (paidCol == null || chargeCol == null)
+    throw new Error("Missing PAID and/or Charge columns.");
+
+  var changed = 0;
+
+  for (var r = 1; r < values.length; r++) {
+    var paid = values[r][paidCol];
+    var charge = Number(values[r][chargeCol]) || 0;
+
+    if (paid === "" || paid == null) {
+      values[r][paidCol] = 0;
+      changed++;
+      continue;
+    }
+
+    var p = Number(paid);
+
+    if (p === 1) {
+      values[r][paidCol] = charge;
+      changed++;
+      continue;
+    }
+    if (p === 0) continue; // leave 0
+    // p > 1 assume already dollars
+  }
+
+  range.setValues(values);
+  Logger.log("migratePaidFlagToAmount_: updated rows: " + changed);
 }
 
 /** -------- Response helpers -------- */
