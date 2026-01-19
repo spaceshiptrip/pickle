@@ -294,6 +294,68 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
     return v.toLocaleString(undefined, { style: "currency", currency: "USD" });
   }
 
+  function fmtTime(v) {
+    if (v === null || v === undefined) return "";
+
+    // Normalize to string when possible
+    if (typeof v === "string") {
+      const s = v.trim();
+      if (!s) return "";
+
+      // ✅ Handle Sheets "time-only" that turns into ISO around 1899-12-30/31
+      // Examples:
+      // 1899-12-30T19:00:00.000Z
+      // 1899-12-31T03:00:00.000Z
+      if (/^1899-12-3[01]T/.test(s)) {
+        const d = new Date(s);
+        if (!isNaN(d)) {
+          return d.toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit",
+          });
+        }
+      }
+
+      // If the backend ever sends a full ISO datetime for a real date,
+      // still try to render it as a time (safe fallback).
+      if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+        const d = new Date(s);
+        if (!isNaN(d)) {
+          return d.toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit",
+          });
+        }
+      }
+
+      // Plain time string (HH:MM[:SS]) -> normalize
+      if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(s)) {
+        const [hh, mm] = s.split(":");
+        const d = new Date();
+        d.setHours(Number(hh), Number(mm), 0, 0);
+        return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      }
+
+      return s;
+    }
+
+    // If it's a Date object or number
+    const d = new Date(v);
+    if (!isNaN(d)) {
+      return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+    return "";
+  }
+
+  function fmtTimeRange(start, end) {
+    const a = fmtTime(start);
+    const b = fmtTime(end);
+    if (!a && !b) return "";
+    if (a && !b) return a;
+    if (!a && b) return b;
+    return `${a}–${b}`;
+  }
+
   function balanceColorClass(n) {
     const v = Number(n || 0);
     if (Math.abs(v) <= 0.0001) return "";
@@ -875,9 +937,13 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                       <table className="w-full text-sm text-left text-slate-800 dark:text-slate-100">
                         <thead className="bg-slate-100 sticky top-0 dark:bg-slate-700/50">
                           <tr>
-                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">
+                            <th
+                              className="p-2 border-b border-slate-200 dark:border-slate-700"
+                              style={{ width: "200px" }}
+                            >
                               Date
                             </th>
+
                             <th className="p-2 border-b border-slate-200 dark:border-slate-700">
                               Status
                             </th>
@@ -904,9 +970,18 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                               key={r.reservationId || i}
                               className="hover:bg-slate-50 dark:hover:bg-slate-700/40"
                             >
-                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
-                                {r.date} {r.start ? ` ${r.start}-${r.end}` : ""}
+                              <td
+                                className="p-2 border-b border-slate-200 dark:border-slate-700"
+                                style={{ width: "200px" }}
+                              >
+                                <div className="font-medium whitespace-nowrap">
+                                  {r.date}
+                                </div>
+                                <div className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                  {fmtTimeRange(r.start, r.end)}
+                                </div>
                               </td>
+
                               <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
                                 <StatusPill status={r.status} />
                               </td>
