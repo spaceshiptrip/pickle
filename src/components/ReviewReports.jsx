@@ -30,7 +30,6 @@ function balanceColorClass(n) {
     : "text-emerald-700 dark:text-emerald-300";
 }
 
-
 function StatusPill({ status }) {
   const s = String(status || "").toLowerCase();
 
@@ -57,7 +56,6 @@ function StatusPill({ status }) {
     </span>
   );
 }
-
 
 export default function ReviewReports({ onClose }) {
   const [preset, setPreset] = useState("30d"); // 'today' | 'week' | 'month' | '30d' | 'range'
@@ -125,199 +123,214 @@ export default function ReviewReports({ onClose }) {
   const balanceClass = balanceColorClass(totals.balance);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-
-      <div
-        className="relative w-full max-w-3xl rounded-2xl bg-white dark:bg-slate-900 shadow-xl border
-                      border-slate-200 dark:border-slate-800"
-      >
-        <div className="flex items-start justify-between p-4 border-b border-slate-200 dark:border-slate-800">
-          <div>
-            <div className="text-lg font-semibold">Reports</div>
-            <div className="text-sm text-slate-600 dark:text-slate-300">
-              {range.from} → {range.to}
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto overscroll-contain"
+      style={{ backgroundColor: "rgba(0,0,0,0.5)", WebkitOverflowScrolling: "touch" }}
+      role="dialog"
+      aria-modal="true"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose?.();
+      }}
+      onTouchStart={(e) => {
+        if (e.target === e.currentTarget) onClose?.();
+      }}
+    >
+      <div className="min-h-full flex items-center justify-center p-2 sm:p-6 py-8">
+        <div
+          className="relative w-full max-w-3xl rounded-2xl bg-white dark:bg-slate-900 shadow-xl border
+             border-slate-200 dark:border-slate-800"
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-start justify-between p-4 border-b border-slate-200 dark:border-slate-800">
+            <div>
+              <div className="text-lg font-semibold">Reports</div>
+              <div className="text-sm text-slate-600 dark:text-slate-300">
+                {range.from} → {range.to}
+              </div>
             </div>
-          </div>
 
-          <button
-            onClick={onClose}
-            className="px-3 py-1.5 rounded-lg border text-sm hover:opacity-90
+            <button
+              onClick={onClose}
+              className="px-3 py-1.5 rounded-lg border text-sm hover:opacity-90
                        border-slate-300 dark:border-slate-700"
-          >
-            Close
-          </button>
-        </div>
+            >
+              Close
+            </button>
+          </div>
 
-        <div className="p-4 space-y-4">
-          {/* Presets */}
-          <div className="flex flex-wrap gap-2">
-            <PresetChip
-              label="Today"
-              active={preset === "today"}
-              onClick={() => setPreset("today")}
-            />
-            <PresetChip
-              label="This week"
-              active={preset === "week"}
-              onClick={() => setPreset("week")}
-            />
-            <PresetChip
-              label="This month"
-              active={preset === "month"}
-              onClick={() => setPreset("month")}
-            />
-            <PresetChip
-              label="Last 30 days"
-              active={preset === "30d"}
-              onClick={() => setPreset("30d")}
-            />
-            <PresetChip
-              label="Range"
-              active={preset === "range"}
-              onClick={() => setPreset("range")}
-            />
-
-            <label className="ml-auto flex items-center gap-2 text-sm select-none">
-              <input
-                type="checkbox"
-                checked={grouped}
-                onChange={(e) => setGrouped(e.target.checked)}
+          <div className="p-4 space-y-4">
+            {/* Presets */}
+            <div className="flex flex-wrap gap-2">
+              <PresetChip
+                label="Today"
+                active={preset === "today"}
+                onClick={() => setPreset("today")}
               />
-              Group by reservation (+N names)
-            </label>
-          </div>
+              <PresetChip
+                label="This week"
+                active={preset === "week"}
+                onClick={() => setPreset("week")}
+              />
+              <PresetChip
+                label="This month"
+                active={preset === "month"}
+                onClick={() => setPreset("month")}
+              />
+              <PresetChip
+                label="Last 30 days"
+                active={preset === "30d"}
+                onClick={() => setPreset("30d")}
+              />
+              <PresetChip
+                label="Range"
+                active={preset === "range"}
+                onClick={() => setPreset("range")}
+              />
 
-          {/* Range inputs */}
-          {preset === "range" && (
-            <div className="flex flex-wrap gap-2 items-end">
-              <div>
-                <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                  From
-                </div>
+              <label className="ml-auto flex items-center gap-2 text-sm select-none">
                 <input
-                  type="date"
-                  value={rangeFrom}
-                  onChange={(e) => setRangeFrom(e.target.value)}
-                  className="rounded border px-2 py-1 text-sm bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"
+                  type="checkbox"
+                  checked={grouped}
+                  onChange={(e) => setGrouped(e.target.checked)}
                 />
-              </div>
+                Group by reservation (+N names)
+              </label>
+            </div>
 
-              <div>
-                <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                  To
+            {/* Range inputs */}
+            {preset === "range" && (
+              <div className="flex flex-wrap gap-2 items-end">
+                <div>
+                  <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                    From
+                  </div>
+                  <input
+                    type="date"
+                    value={rangeFrom}
+                    onChange={(e) => setRangeFrom(e.target.value)}
+                    className="rounded border px-2 py-1 text-sm bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"
+                  />
                 </div>
-                <input
-                  type="date"
-                  value={rangeTo}
-                  onChange={(e) => setRangeTo(e.target.value)}
-                  className="rounded border px-2 py-1 text-sm bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"
-                />
-              </div>
-            </div>
-          )}
 
-          {err && (
-            <div className="p-3 rounded-lg border border-red-300 bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200 dark:border-red-900">
-              {err}
-            </div>
-          )}
-
-          {/* Summary cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-            <Card
-              title="Balance"
-              value={money(totals.balance)}
-              valueClassName={balanceClass}
-            />
-            <Card title="Charges" value={money(totals.charges)} />
-            <Card title="Paid" value={money(totals.paid)} />
-            <Card title="Plays" value={String(totals.plays)} />
-          </div>
-
-          {/* Details */}
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-            <div className="px-3 py-2 text-sm font-semibold border-b border-slate-200 dark:border-slate-800">
-              {grouped ? "By reservation" : "Details"}
-            </div>
-
-            {grouped ? (
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 dark:bg-slate-950">
-                  <tr className="text-left">
-                    <th className="p-2">Date</th>
-                    <th className="p-2">Status</th>
-                    <th className="p-2">Players (+N)</th>
-                    <th className="p-2">Charges</th>
-                    <th className="p-2">Paid</th>
-                    <th className="p-2">Outstanding</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td
-                        colSpan={6}
-                        className="p-4 text-center text-slate-500 dark:text-slate-400"
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          <Spinner className="h-4 w-4" />
-                          Loading…
-                        </span>
-                      </td>
-                    </tr>
-                  ) : rows.length === 0 ? (
-                    <tr>
-                      <td
-                        className="p-3 text-slate-600 dark:text-slate-300"
-                        colSpan={6}
-                      >
-                        No activity in this range.
-                      </td>
-                    </tr>
-                  ) : (
-                    rows.map((r) => (
-                      <tr
-                        key={r.reservationId}
-                        className="border-t border-slate-200 dark:border-slate-800"
-                      >
-                        <td className="p-2 whitespace-nowrap">{r.date}</td>
-                        <td className="p-2 whitespace-nowrap">
-                          <StatusPill status={r.status} />
-                        </td>
-
-                        <td className="p-2">
-                          {Array.isArray(r.players) ? r.players.join(", ") : ""}
-                        </td>
-                        <td className="p-2 whitespace-nowrap">
-                          {money(r.charges)}
-                        </td>
-                        <td className="p-2 whitespace-nowrap">
-                          {money(r.paid)}
-                        </td>
-
-                        {/* Changed: Outstanding colored red (owed) / green (credit) when non-zero */}
-                        <td
-                          className={`p-2 whitespace-nowrap font-semibold ${balanceColorClass(r.balance)}`}
-                        >
-                          {money(r.balance)}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            ) : (
-              <div className="p-4 text-sm text-slate-600 dark:text-slate-300">
-                If you want an ungrouped ledger view later, we can add a
-                `reportDetails` endpoint.
+                <div>
+                  <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                    To
+                  </div>
+                  <input
+                    type="date"
+                    value={rangeTo}
+                    onChange={(e) => setRangeTo(e.target.value)}
+                    className="rounded border px-2 py-1 text-sm bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"
+                  />
+                </div>
               </div>
             )}
-          </div>
 
-          <div className="text-xs text-slate-500 dark:text-slate-400">
-            Balance is calculated as Charges − Paid for attendance rows
-            associated with your UserId.
+            {err && (
+              <div className="p-3 rounded-lg border border-red-300 bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200 dark:border-red-900">
+                {err}
+              </div>
+            )}
+
+            {/* Summary cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <Card
+                title="Balance"
+                value={money(totals.balance)}
+                valueClassName={balanceClass}
+              />
+              <Card title="Charges" value={money(totals.charges)} />
+              <Card title="Paid" value={money(totals.paid)} />
+              <Card title="Plays" value={String(totals.plays)} />
+            </div>
+
+            {/* Details */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+              <div className="px-3 py-2 text-sm font-semibold border-b border-slate-200 dark:border-slate-800">
+                {grouped ? "By reservation" : "Details"}
+              </div>
+
+              {grouped ? (
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 dark:bg-slate-950">
+                    <tr className="text-left">
+                      <th className="p-2">Date</th>
+                      <th className="p-2">Status</th>
+                      <th className="p-2">Players (+N)</th>
+                      <th className="p-2">Charges</th>
+                      <th className="p-2">Paid</th>
+                      <th className="p-2">Outstanding</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="p-4 text-center text-slate-500 dark:text-slate-400"
+                        >
+                          <span className="inline-flex items-center gap-2">
+                            <Spinner className="h-4 w-4" />
+                            Loading…
+                          </span>
+                        </td>
+                      </tr>
+                    ) : rows.length === 0 ? (
+                      <tr>
+                        <td
+                          className="p-3 text-slate-600 dark:text-slate-300"
+                          colSpan={6}
+                        >
+                          No activity in this range.
+                        </td>
+                      </tr>
+                    ) : (
+                      rows.map((r) => (
+                        <tr
+                          key={r.reservationId}
+                          className="border-t border-slate-200 dark:border-slate-800"
+                        >
+                          <td className="p-2 whitespace-nowrap">{r.date}</td>
+                          <td className="p-2 whitespace-nowrap">
+                            <StatusPill status={r.status} />
+                          </td>
+
+                          <td className="p-2">
+                            {Array.isArray(r.players)
+                              ? r.players.join(", ")
+                              : ""}
+                          </td>
+                          <td className="p-2 whitespace-nowrap">
+                            {money(r.charges)}
+                          </td>
+                          <td className="p-2 whitespace-nowrap">
+                            {money(r.paid)}
+                          </td>
+
+                          {/* Changed: Outstanding colored red (owed) / green (credit) when non-zero */}
+                          <td
+                            className={`p-2 whitespace-nowrap font-semibold ${balanceColorClass(r.balance)}`}
+                          >
+                            {money(r.balance)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="p-4 text-sm text-slate-600 dark:text-slate-300">
+                  If you want an ungrouped ledger view later, we can add a
+                  `reportDetails` endpoint.
+                </div>
+              )}
+            </div>
+
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              Balance is calculated as Charges − Paid for attendance rows
+              associated with your UserId.
+            </div>
           </div>
         </div>
       </div>
