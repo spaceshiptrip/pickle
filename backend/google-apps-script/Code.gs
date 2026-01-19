@@ -77,6 +77,12 @@ function doGet(e) {
     return json_(reportSummary_(ctxR.user, e.parameter || {}));
   }
 
+  if (action === "adminreport") {
+    var ctxA = requireAuth_(e, null);
+    requireRole_(ctxA, ["admin"]);
+    return json_(adminReport_(ctxA, e.parameter || {}));
+  }
+
   return json_({ ok: false, error: "unknown_action" }, 400);
 }
 
@@ -620,9 +626,7 @@ function listAttendance_(e, ctx) {
     var isCanceled = false;
     if (idx["ReservationId"] !== undefined) {
       var rid = String(r[idx["ReservationId"]] || "");
-      isCanceled =
-        rid &&
-        (resStatus[rid] === "canceled" );
+      isCanceled = rid && resStatus[rid] === "canceled";
     }
 
     // Filter: reservationId OR month OR all
@@ -669,7 +673,6 @@ function listAttendance_(e, ctx) {
       if (isCanceled) {
         chargeVal = 0;
       }
-
     }
 
     out.push({
@@ -1359,6 +1362,310 @@ function reportSummary_(sessionUser, params) {
     byReservation: byReservation,
   };
 } /* reportSummary_ */
+
+
+
+
+function adminReport_(ctx, params) {
+  requireRole_(ctx, ["admin"]);
+
+  var from = (params.from || "").trim(); // YYYY-MM-DD
+  var to = (params.to || "").trim();     // YYYY-MM-DD
+  var userId = (params.userId || "").trim();
+
+  var preset = (params.preset || "month").trim();
+  var now = new Date();
+  var range = computeRange_(preset, from, to, now);
+
+  // ---- Read Reservations as array rows ----
+  var resSheet = getSheet_(RESERVATIONS_SHEET_NAME);
+  var resT = readTable_(resSheet);
+  var rIdx = headerIndexMap_(resT.header);
+
+  var resById = {};
+  for (var i = 0; i < resT.rows.length; i++) {
+    var rr = resT.rows[i];
+    var id = rIdx["Id"] !== undefined ? String(rr[rIdx["Id"]] || "").trim() : "";
+    if (!id) continue;
+
+    resById[id] = {
+      Id: id,
+      Date: formatYmdFromAny_(rIdx["Date"] !== undefined ? rr[rIdx["Date"]] : ""),
+      Start: rIdx["Start"] !== undefined ? (rr[rIdx["Start"]] || "") : "",
+      End: rIdx["End"] !== undefined ? (rr[rIdx["End"]] || "") : "",
+      Court: rIdx["Court"] !== undefined ? (rr[rIdx["Court"]] || "") : "",
+      Status:
+        rIdx["Status"] !== undefined
+          ? String(rr[rIdx["Status"]] || "reserved").toLowerCase().trim()
+          : "reserved",
+    };
+  }
+
+  // ---- Read Attendance as array rows ----
+  var attSheet = getSheet_(ATTENDANCE_SHEET_NAME);
+  var attT = readTable_(attSheet);
+  var aIdx = headerIndexMap_(attT.header);
+
+  var presentCol =
+    aIdx["Present (1/0)"] !== undefined ? aIdx["Present (1/0)"] : aIdx["Present"];
+  var playerCol =
+    aIdx["Player Name"] !== undefined ? aIdx["Player Name"] : aIdx["Player"];
+  var ridCol =
+    aIdx["ReservationId"] !== undefined ? aIdx["ReservationId"] : aIdx["ReservationID"];
+  var uidCol =
+    aIdx["UserId"] !== undefined ? aIdx["UserId"] : aIdx["UserID"];
+  var dateCol = aIdx["Date"];
+  var paidCol = aIdx["PAID"];
+  var chargeCol =
+    aIdx["Charge (auto)"] !== undefined ? aIdx["Charge (auto)"] : aIdx["Charge"];
+
+  var rows = [];
+  for (var j = 0; j < attT.rows.length; j++) {
+    var ar = attT.rows[j];
+
+    var present = num_(presentCol !== undefined ? ar[presentCol] : 0);
+    if (present !== 1) continue;
+
+    var rid = String(ridCol !== undefined ? ar[ridCol] : "").trim();
+    if (!rid) continue;
+
+    var uid = String(uidCol !== undefined ? ar[uidCol] : "").trim();
+    if (userId && uid !== userId) continue;
+
+    var dt = formatYmdFromAny_(dateCol !== undefined ? ar[dateCol] : "");
+    if (!dt) continue;
+    if (dt < range.from || dt > range.to) continue;
+
+    var player = String(playerCol !== undefined ? ar[playerCol] : "").trim();
+
+    var charge = round2_(num_(chargeCol !== undefined ? ar[chargeCol] : 0));
+    var paid = round2_(num_(paidCol !== undefined ? ar[paidCol] : 0));
+
+    var resMeta = resById[rid] || {
+      Id: rid,
+      Date: dt,
+      Status: "reserved",
+      Start: "",
+      End: "",
+      Court: "",
+    };
+
+    var status = String(resMeta.Status || "reserved").toLowerCase();
+    var isCanceled = status === "canceled";
+
+    rows.push({
+      date: dt,
+      reservationId: rid,
+      status: status,
+      start: resMeta.Start || "",
+      end: resMeta.End || "",
+      court: resMeta.Court || "",
+      player: player,
+      userId: uid || "",
+      charge: charge,
+      paid: paid,
+      isCanceled: isCanceled,
+    });
+  }
+
+  // Totals with your canceled rules
+  var totals = {
+    uniquePlayers: 0,
+    checkinsActive: 0,
+    checkinsCanceled: 0,
+    chargesActive: 0,
+    paidActive: 0,
+    outstandingActive: 0,
+    paidCanceled: 0,
+    creditCanceled: 0,
+    netCollected: 0,
+  };
+
+  var uniq = {};
+  for (var k = 0; k < rows.length; k++) {
+    var x = rows[k];
+    uniq[x.player] = true;
+
+    if (x.isCanceled) {
+      totals.checkinsCanceled += 1;
+      // exclude canceled from charges, but if they paid, treat as credit bucket
+      if (x.paid > 0) totals.paidCanceled += x.paid;
+    } else {
+      totals.checkinsActive += 1;
+      totals.chargesActive += x.charge;
+      totals.paidActive += x.paid;
+    }
+  }
+
+  totals.uniquePlayers = Object.keys(uniq).length;
+  totals.chargesActive = round2_(totals.chargesActive);
+  totals.paidActive = round2_(totals.paidActive);
+  totals.paidCanceled = round2_(totals.paidCanceled);
+  totals.creditCanceled = totals.paidCanceled; // same value, different meaning
+  totals.outstandingActive = round2_(totals.chargesActive - totals.paidActive);
+  totals.netCollected = round2_(totals.paidActive + totals.paidCanceled);
+
+  // Groupings: byUser and byReservation (both useful for admin)
+  var byUser = {};
+  var byReservation = {};
+
+  for (var m = 0; m < rows.length; m++) {
+    var r0 = rows[m];
+
+    // byUser
+    var ukey = r0.userId || "(no user)";
+    if (!byUser[ukey]) {
+      byUser[ukey] = {
+        userId: ukey,
+        players: {},
+        checkinsActive: 0,
+        chargesActive: 0,
+        paidActive: 0,
+        outstandingActive: 0,
+        paidCanceled: 0,
+        creditCanceled: 0,
+        netCollected: 0,
+      };
+    }
+    var U = byUser[ukey];
+    U.players[r0.player] = true;
+
+    if (r0.isCanceled) {
+      if (r0.paid > 0) U.paidCanceled += r0.paid;
+    } else {
+      U.checkinsActive += 1;
+      U.chargesActive += r0.charge;
+      U.paidActive += r0.paid;
+    }
+
+    // byReservation
+    var rkey = r0.reservationId;
+    if (!byReservation[rkey]) {
+      byReservation[rkey] = {
+        reservationId: rkey,
+        date: r0.date,
+        status: r0.status,
+        start: r0.start,
+        end: r0.end,
+        court: r0.court,
+        players: [],
+        chargesActive: 0,
+        paidActive: 0,
+        outstandingActive: 0,
+        paidCanceled: 0,
+        creditCanceled: 0,
+        netCollected: 0,
+      };
+    }
+    var R = byReservation[rkey];
+    R.players.push(r0.player);
+
+    if (r0.isCanceled) {
+      if (r0.paid > 0) R.paidCanceled += r0.paid;
+    } else {
+      R.chargesActive += r0.charge;
+      R.paidActive += r0.paid;
+    }
+  }
+
+  // finalize
+  var byUserArr = [];
+  Object.keys(byUser).forEach(function (key) {
+    var U2 = byUser[key];
+    U2.uniquePlayers = Object.keys(U2.players).length;
+    delete U2.players;
+    U2.chargesActive = round2_(U2.chargesActive);
+    U2.paidActive = round2_(U2.paidActive);
+    U2.paidCanceled = round2_(U2.paidCanceled);
+    U2.creditCanceled = U2.paidCanceled;
+    U2.outstandingActive = round2_(U2.chargesActive - U2.paidActive);
+    U2.netCollected = round2_(U2.paidActive + U2.paidCanceled);
+    byUserArr.push(U2);
+  });
+
+  var byResArr = [];
+  Object.keys(byReservation).forEach(function (key) {
+    var R2 = byReservation[key];
+    R2.chargesActive = round2_(R2.chargesActive);
+    R2.paidActive = round2_(R2.paidActive);
+    R2.paidCanceled = round2_(R2.paidCanceled);
+    R2.creditCanceled = R2.paidCanceled;
+    R2.outstandingActive = round2_(R2.chargesActive - R2.paidActive);
+    R2.netCollected = round2_(R2.paidActive + R2.paidCanceled);
+    byResArr.push(R2);
+  });
+
+  // sort by date desc for tables
+  byResArr.sort(function (a, b) {
+    return a.date < b.date ? 1 : a.date > b.date ? -1 : 0;
+  });
+
+  return {
+    ok: true,
+    range: range,
+    totals: totals,
+    byUser: byUserArr,
+    byReservation: byResArr,
+    // optional: send raw rows if you want a ledger view later
+    rows: rows,
+  };
+} /* adminReport_ */
+
+/* ---------------- helpers (safe + small) ---------------- */
+
+function computeRange_(preset, from, to, now) {
+  function ymd_(d) {
+    var pad = function (n) {
+      return String(n).padStart(2, "0");
+    };
+    return (
+      d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate())
+    );
+  }
+
+  var end = new Date(now);
+  var start = new Date(now);
+
+  if (preset === "all") {
+    return { from: "1900-01-01", to: ymd_(end) };
+  }
+
+  if (preset === "range") {
+    return { from: from || ymd_(end), to: to || ymd_(end) };
+  }
+
+  if (preset === "week") {
+    // Monday-start
+    var day = end.getDay(); // 0 Sun
+    var diff = day === 0 ? -6 : 1 - day;
+    start.setDate(end.getDate() + diff);
+    return { from: ymd_(start), to: ymd_(end) };
+  }
+
+  if (preset === "30d") {
+    start.setDate(end.getDate() - 30);
+    return { from: ymd_(start), to: ymd_(end) };
+  }
+
+  // default month
+  start.setDate(1);
+  return { from: ymd_(start), to: ymd_(end) };
+}
+
+
+function formatYmdFromAny_(v) {
+  if (!v) return "";
+  // already yyyy-mm-dd?
+  var s = String(v);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  var d = v instanceof Date ? v : new Date(v);
+  if (isNaN(d.getTime())) return "";
+  var pad = function (n) {
+    return String(n).padStart(2, "0");
+  };
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+}
 
 /*** helpers (add if you don't already have equivalents) ***/
 function indexMap_(headers) {

@@ -43,12 +43,19 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
   });
   const [loading, setLoading] = useState(false);
 
-  // Reports
-  const [reportMonth, setReportMonth] = useState(
-    new Date().toISOString().substring(0, 7),
-  ); // YYYY-MM
-  const [reportData, setReportData] = useState([]);
+  // Reports (upgraded)
+  const [reportPreset, setReportPreset] = useState("month"); // week|month|30d|range|all
+  const [reportFrom, setReportFrom] = useState(
+    new Date().toISOString().substring(0, 10),
+  ); // YYYY-MM-DD
+  const [reportTo, setReportTo] = useState(
+    new Date().toISOString().substring(0, 10),
+  );
+  const [reportUserId, setReportUserId] = useState(""); // optional filter
+  const [reportTab, setReportTab] = useState("reservation"); // reservation|user
+  const [reportRes, setReportRes] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState("");
 
   // Approvals
   const [approvals, setApprovals] = useState([]);
@@ -220,16 +227,156 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
     }
   }
 
-  async function loadReport() {
-    if (!reportMonth) return;
-    setReportLoading(true);
-    try {
-      const r = await apiGet({ action: "listattendance", month: reportMonth });
-      if (r.ok) setReportData(r.attendees);
-    } catch (e) {
-      console.error(e);
+  function ymd(d) {
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  function computeReportRange(preset) {
+    const today = new Date();
+    const start = new Date(today);
+
+    if (preset === "all") {
+      return { from: "2000-01-01", to: ymd(today) }; // arbitrary “early” date
     }
-    setReportLoading(false);
+
+    if (preset === "range") {
+      const from = (reportFrom || "").trim() || ymd(today);
+      const to = (reportTo || "").trim() || ymd(today);
+      return { from, to };
+    }
+
+    if (preset === "week") {
+      // Monday start
+      const day = today.getDay(); // 0 Sun
+      const diff = day === 0 ? -6 : 1 - day;
+      start.setDate(today.getDate() + diff);
+      return { from: ymd(start), to: ymd(today) };
+    }
+
+    if (preset === "month") {
+      start.setDate(1);
+      return { from: ymd(start), to: ymd(today) };
+    }
+
+    // 30d
+    start.setDate(today.getDate() - 30);
+    return { from: ymd(start), to: ymd(today) };
+  }
+
+  async function loadReport() {
+    setReportLoading(true);
+    setReportError("");
+    setReportRes(null);
+
+    try {
+      const range = computeReportRange(reportPreset);
+
+      const r = await apiGet({
+        action: "adminreport",
+        preset: reportPreset,
+        from: range.from,
+        to: range.to,
+        userId: (reportUserId || "").trim(),
+      });
+
+      if (r?.ok) setReportRes(r);
+      else setReportError(r?.error || "Failed to load report");
+    } catch (e) {
+      setReportError(e?.message || "Failed to load report");
+    } finally {
+      setReportLoading(false);
+    }
+  }
+
+  function money(n) {
+    const v = Number(n || 0);
+    return v.toLocaleString(undefined, { style: "currency", currency: "USD" });
+  }
+
+  function fmtTime(v) {
+    if (v === null || v === undefined) return "";
+
+    // Normalize to string when possible
+    if (typeof v === "string") {
+      const s = v.trim();
+      if (!s) return "";
+
+      // ✅ Handle Sheets "time-only" that turns into ISO around 1899-12-30/31
+      // Examples:
+      // 1899-12-30T19:00:00.000Z
+      // 1899-12-31T03:00:00.000Z
+      if (/^1899-12-3[01]T/.test(s)) {
+        const d = new Date(s);
+        if (!isNaN(d)) {
+          return d.toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit",
+          });
+        }
+      }
+
+      // If the backend ever sends a full ISO datetime for a real date,
+      // still try to render it as a time (safe fallback).
+      if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+        const d = new Date(s);
+        if (!isNaN(d)) {
+          return d.toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit",
+          });
+        }
+      }
+
+      // Plain time string (HH:MM[:SS]) -> normalize
+      if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(s)) {
+        const [hh, mm] = s.split(":");
+        const d = new Date();
+        d.setHours(Number(hh), Number(mm), 0, 0);
+        return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      }
+
+      return s;
+    }
+
+    // If it's a Date object or number
+    const d = new Date(v);
+    if (!isNaN(d)) {
+      return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+    return "";
+  }
+
+  function fmtTimeRange(start, end) {
+    const a = fmtTime(start);
+    const b = fmtTime(end);
+    if (!a && !b) return "";
+    if (a && !b) return a;
+    if (!a && b) return b;
+    return `${a}–${b}`;
+  }
+
+  function balanceColorClass(n) {
+    const v = Number(n || 0);
+    if (Math.abs(v) <= 0.0001) return "";
+    return v > 0
+      ? "text-rose-700 dark:text-rose-300"
+      : "text-emerald-700 dark:text-emerald-300";
+  }
+
+  function StatusPill({ status }) {
+    const s = String(status || "").toLowerCase();
+    const isCanceled = s === "canceled";
+    const cls = isCanceled
+      ? "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200 border-rose-200 dark:border-rose-900"
+      : "bg-emerald-600 text-white border-emerald-700 dark:bg-emerald-500 dark:border-emerald-400";
+    return (
+      <span
+        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${cls}`}
+      >
+        {isCanceled ? "Canceled" : "Reserved"}
+      </span>
+    );
   }
 
   async function saveReservation() {
@@ -274,17 +421,6 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
       alert("Error: " + e.message);
     }
   }
-
-  const reportStats = useMemo(() => {
-    const totalPlayers = reportData.length;
-    const uniquePlayers = new Set(reportData.map((r) => r.Player)).size;
-    const totalCollected = reportData.reduce(
-      (acc, r) => acc + (r.Charge || 0),
-      0,
-    );
-    const unpaidCount = reportData.filter((r) => !r.PAID).length;
-    return { totalPlayers, uniquePlayers, totalCollected, unpaidCount };
-  }, [reportData]);
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
@@ -645,120 +781,299 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
       {isAdmin && (
         <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="font-semibold text-lg text-slate-900 dark:text-slate-100">
-              Monthly Report
-            </h3>
-            <div className="flex gap-2 items-center">
-              <input
-                type="month"
-                className={inputClass}
-                value={reportMonth}
-                onChange={(e) => setReportMonth(e.target.value)}
-              />
-              <button
-                onClick={loadReport}
-                className="bg-gray-800 text-white px-3 py-1 rounded text-sm hover:bg-black
-                                           dark:bg-slate-700 dark:hover:bg-slate-600"
-              >
-                {reportLoading ? "Loading..." : "Load Report"}
-              </button>
+            <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                <h3 className="font-semibold text-lg text-slate-900 dark:text-slate-100">
+                  Reports
+                </h3>
+
+                <div className="flex flex-wrap gap-2 items-center">
+                  <select
+                    className={selectClass}
+                    value={reportPreset}
+                    onChange={(e) => setReportPreset(e.target.value)}
+                  >
+                    <option value="week">This week</option>
+                    <option value="month">This month</option>
+                    <option value="30d">Last 30 days</option>
+                    <option value="range">Range</option>
+                    <option value="all">All-time</option>
+                  </select>
+
+                  {reportPreset === "range" && (
+                    <>
+                      <input
+                        type="date"
+                        className={inputClass}
+                        value={reportFrom}
+                        onChange={(e) => setReportFrom(e.target.value)}
+                      />
+                      <input
+                        type="date"
+                        className={inputClass}
+                        value={reportTo}
+                        onChange={(e) => setReportTo(e.target.value)}
+                      />
+                    </>
+                  )}
+
+                  <input
+                    className={inputClass}
+                    placeholder="Filter by UserId (optional)"
+                    value={reportUserId}
+                    onChange={(e) => setReportUserId(e.target.value)}
+                    style={{ maxWidth: 220 }}
+                  />
+
+                  <button
+                    onClick={loadReport}
+                    className="bg-gray-800 text-white px-3 py-1 rounded text-sm hover:bg-black
+                 dark:bg-slate-700 dark:hover:bg-slate-600 flex items-center gap-2"
+                  >
+                    {reportLoading && <Spinner className="h-4 w-4" />}
+                    {reportLoading ? "Loading..." : "Load"}
+                  </button>
+                </div>
+              </div>
+
+              {reportError && (
+                <div
+                  className="p-3 mb-4 bg-red-50 border border-red-200 text-red-700 rounded text-sm
+                    dark:bg-rose-500/10 dark:border-rose-500/30 dark:text-rose-200"
+                >
+                  ⚠️ {reportError}
+                </div>
+              )}
+
+              {reportRes?.ok && (
+                <div
+                  className="bg-white p-4 rounded shadow-sm border border-slate-200
+                    dark:bg-slate-800 dark:border-slate-700"
+                >
+                  <div className="text-sm text-slate-600 dark:text-slate-300 mb-3">
+                    {reportRes.range?.from} → {reportRes.range?.to}
+                    {reportUserId ? ` · UserId ${reportUserId}` : ""}
+                  </div>
+
+                  {/* Summary cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4 text-center">
+                    <div className="p-2 bg-blue-50 rounded dark:bg-blue-500/10">
+                      <div className="text-xl font-bold text-blue-800 dark:text-blue-200">
+                        {reportRes.totals.uniquePlayers}
+                      </div>
+                      <div className="text-xs text-blue-600 dark:text-blue-300 uppercase">
+                        Unique Players
+                      </div>
+                    </div>
+
+                    <div className="p-2 bg-gray-50 rounded dark:bg-slate-700/40">
+                      <div className="text-xl font-bold text-gray-800 dark:text-slate-100">
+                        {reportRes.totals.checkinsActive}
+                      </div>
+                      <div className="text-xs text-gray-600 dark:text-slate-300 uppercase">
+                        Active Check-ins
+                      </div>
+                    </div>
+
+                    <div className="p-2 bg-green-50 rounded dark:bg-emerald-500/10">
+                      <div className="text-xl font-bold text-green-800 dark:text-emerald-200">
+                        {money(reportRes.totals.netCollected)}
+                      </div>
+                      <div className="text-xs text-green-600 dark:text-emerald-300 uppercase">
+                        Net Collected
+                      </div>
+                    </div>
+
+                    <div className="p-2 bg-red-50 rounded dark:bg-rose-500/10">
+                      <div
+                        className={`text-xl font-bold ${balanceColorClass(reportRes.totals.outstandingActive)}`}
+                      >
+                        {money(reportRes.totals.outstandingActive)}
+                      </div>
+                      <div className="text-xs text-red-600 dark:text-rose-300 uppercase">
+                        Outstanding (Active)
+                      </div>
+                    </div>
+
+                    <div className="p-2 bg-purple-50 rounded dark:bg-purple-500/10">
+                      <div className="text-xl font-bold text-purple-800 dark:text-purple-200">
+                        {money(reportRes.totals.creditCanceled)}
+                      </div>
+                      <div className="text-xs text-purple-600 dark:text-purple-300 uppercase">
+                        Canceled Credits
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tabs */}
+                  <div className="flex gap-2 mb-3">
+                    <button
+                      className={
+                        "text-sm border px-3 py-1 rounded " +
+                        (reportTab === "reservation"
+                          ? "bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white"
+                          : "bg-white text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600")
+                      }
+                      onClick={() => setReportTab("reservation")}
+                    >
+                      By Reservation
+                    </button>
+                    <button
+                      className={
+                        "text-sm border px-3 py-1 rounded " +
+                        (reportTab === "user"
+                          ? "bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white"
+                          : "bg-white text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600")
+                      }
+                      onClick={() => setReportTab("user")}
+                    >
+                      By User
+                    </button>
+                  </div>
+
+                  {/* Tables */}
+                  <div className="max-h-72 overflow-y-auto border rounded border-slate-200 dark:border-slate-700">
+                    {reportTab === "reservation" ? (
+                      <table className="w-full text-sm text-left text-slate-800 dark:text-slate-100">
+                        <thead className="bg-slate-100 sticky top-0 dark:bg-slate-700/50">
+                          <tr>
+                            <th
+                              className="p-2 border-b border-slate-200 dark:border-slate-700"
+                              style={{ width: "200px" }}
+                            >
+                              Date
+                            </th>
+
+                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">
+                              Status
+                            </th>
+                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">
+                              Players
+                            </th>
+                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">
+                              Charges
+                            </th>
+                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">
+                              Paid
+                            </th>
+                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">
+                              Canceled Credit
+                            </th>
+                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">
+                              Outstanding
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(reportRes.byReservation || []).map((r, i) => (
+                            <tr
+                              key={r.reservationId || i}
+                              className="hover:bg-slate-50 dark:hover:bg-slate-700/40"
+                            >
+                              <td
+                                className="p-2 border-b border-slate-200 dark:border-slate-700"
+                                style={{ width: "200px" }}
+                              >
+                                <div className="font-medium whitespace-nowrap">
+                                  {r.date}
+                                </div>
+                                <div className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                  {fmtTimeRange(r.start, r.end)}
+                                </div>
+                              </td>
+
+                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                <StatusPill status={r.status} />
+                              </td>
+                              <td className="p-2 border-b border-slate-200 dark:border-slate-700">
+                                {Array.isArray(r.players)
+                                  ? r.players.join(", ")
+                                  : ""}
+                              </td>
+                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                {money(r.chargesActive)}
+                              </td>
+                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                {money(r.paidActive)}
+                              </td>
+                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                {money(r.creditCanceled)}
+                              </td>
+                              <td
+                                className={`p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap font-semibold ${balanceColorClass(r.outstandingActive)}`}
+                              >
+                                {money(r.outstandingActive)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <table className="w-full text-sm text-left text-slate-800 dark:text-slate-100">
+                        <thead className="bg-slate-100 sticky top-0 dark:bg-slate-700/50">
+                          <tr>
+                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">
+                              UserId
+                            </th>
+                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">
+                              Unique Players
+                            </th>
+                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">
+                              Check-ins
+                            </th>
+                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">
+                              Net Collected
+                            </th>
+                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">
+                              Canceled Credit
+                            </th>
+                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">
+                              Outstanding
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(reportRes.byUser || []).map((u, i) => (
+                            <tr
+                              key={u.userId || i}
+                              className="hover:bg-slate-50 dark:hover:bg-slate-700/40"
+                            >
+                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                {u.userId}
+                              </td>
+                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                {u.uniquePlayers}
+                              </td>
+                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                {u.checkinsActive}
+                              </td>
+                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                {money(u.netCollected)}
+                              </td>
+                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                {money(u.creditCanceled)}
+                              </td>
+                              <td
+                                className={`p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap font-semibold ${balanceColorClass(u.outstandingActive)}`}
+                              >
+                                {money(u.outstandingActive)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+
+                  <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    Canceled sessions are excluded from charges/check-ins. Any
+                    money paid on a canceled session is shown as “Canceled
+                    Credits”.
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-
-          {reportData.length > 0 && (
-            <div
-              className="bg-white p-4 rounded shadow-sm border border-slate-200
-                                        dark:bg-slate-800 dark:border-slate-700"
-            >
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4 text-center">
-                <div className="p-2 bg-blue-50 rounded dark:bg-blue-500/10">
-                  <div className="text-xl font-bold text-blue-800 dark:text-blue-200">
-                    {reportStats.uniquePlayers}
-                  </div>
-                  <div className="text-xs text-blue-600 dark:text-blue-300 uppercase">
-                    Unique Players
-                  </div>
-                </div>
-                <div className="p-2 bg-green-50 rounded dark:bg-emerald-500/10">
-                  <div className="text-xl font-bold text-green-800 dark:text-emerald-200">
-                    ${reportStats.totalCollected.toFixed(2)}
-                  </div>
-                  <div className="text-xs text-green-600 dark:text-emerald-300 uppercase">
-                    Total Collected
-                  </div>
-                </div>
-                <div className="p-2 bg-gray-50 rounded dark:bg-slate-700/40">
-                  <div className="text-xl font-bold text-gray-800 dark:text-slate-100">
-                    {reportStats.totalPlayers}
-                  </div>
-                  <div className="text-xs text-gray-600 dark:text-slate-300 uppercase">
-                    Check-ins
-                  </div>
-                </div>
-                <div className="p-2 bg-red-50 rounded dark:bg-rose-500/10">
-                  <div className="text-xl font-bold text-red-800 dark:text-rose-200">
-                    {reportStats.unpaidCount}
-                  </div>
-                  <div className="text-xs text-red-600 dark:text-rose-300 uppercase">
-                    Unpaid
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end mb-2">
-                <button
-                  onClick={() =>
-                    copyToClipboard(reportStats.totalCollected.toFixed(2))
-                  }
-                  className="text-xs text-blue-600 underline dark:text-blue-300"
-                >
-                  Copy Total ($)
-                </button>
-              </div>
-
-              <div className="max-h-60 overflow-y-auto border rounded border-slate-200 dark:border-slate-700">
-                <table className="w-full text-sm text-left text-slate-800 dark:text-slate-100">
-                  <thead className="bg-slate-100 sticky top-0 dark:bg-slate-700/50">
-                    <tr>
-                      <th className="p-2 border-b border-slate-200 dark:border-slate-700">
-                        Date
-                      </th>
-                      <th className="p-2 border-b border-slate-200 dark:border-slate-700">
-                        Player
-                      </th>
-                      <th className="p-2 border-b border-slate-200 dark:border-slate-700">
-                        Charge
-                      </th>
-                      <th className="p-2 border-b border-slate-200 dark:border-slate-700">
-                        Paid
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reportData.map((row, i) => (
-                      <tr
-                        key={i}
-                        className="hover:bg-slate-50 dark:hover:bg-slate-700/40"
-                      >
-                        <td className="p-2 border-b border-slate-200 dark:border-slate-700">
-                          {row.Date ? String(row.Date).split("T")[0] : ""}
-                        </td>
-                        <td className="p-2 border-b border-slate-200 dark:border-slate-700">
-                          {row.Player}
-                        </td>
-                        <td className="p-2 border-b border-slate-200 dark:border-slate-700">
-                          ${row.Charge}
-                        </td>
-                        <td className="p-2 border-b border-slate-200 dark:border-slate-700 text-center">
-                          {row.PAID ? "✅" : "❌"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
