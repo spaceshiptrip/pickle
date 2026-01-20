@@ -1080,16 +1080,6 @@ className={`
           </div>
         </div>
       </div>
-
-      {/* Mobile fail-safe close button */}
-      <button
-        onClick={handleClose}
-        className="fixed bottom-4 right-4 z-[60] bg-black text-white px-4 py-3 rounded-full font-bold shadow-lg hover:bg-gray-900 sm:hidden"
-        type="button"
-        aria-label="Close dialog"
-      >
-        ✕ Close
-      </button>
     </div>
   );
 }
