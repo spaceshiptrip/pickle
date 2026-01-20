@@ -66,6 +66,24 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
 
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
+  // keys: date, player, status, charge, paid, balance, reservationId, userId
+  const [ledgerSort, setLedgerSort] = useState({ key: "date", dir: "desc" });
+
+  const ledgerRows = useMemo(() => {
+    const raw = reportRes?.rows || [];
+    const normalized = raw.map((r) => {
+      const charge = Number(r.charge || 0);
+      const paid = Number(r.paid || 0);
+      return {
+        ...r,
+        charge,
+        paid,
+        balance: charge - paid, // owed if >0; credit if <0
+      };
+    });
+    return sortRows(normalized, ledgerSort);
+  }, [reportRes, ledgerSort]);
+
   // Shared UI classes (light + dark)
   const panelWrapClass =
     "mt-8 border rounded p-3 bg-gray-50 text-slate-900 border-slate-200 " +
@@ -292,6 +310,43 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
   function money(n) {
     const v = Number(n || 0);
     return v.toLocaleString(undefined, { style: "currency", currency: "USD" });
+  }
+
+  function safeStr(v) {
+    return String(v ?? "");
+  }
+
+  function compare(a, b) {
+    if (a === b) return 0;
+    return a > b ? 1 : -1;
+  }
+
+  function sortRows(rows, sort) {
+    const { key, dir } = sort;
+    const sign = dir === "asc" ? 1 : -1;
+
+    return [...rows].sort((ra, rb) => {
+      const a = ra[key];
+      const b = rb[key];
+
+      // numeric keys
+      if (key === "charge" || key === "paid" || key === "balance") {
+        return sign * compare(Number(a || 0), Number(b || 0));
+      }
+
+      // date sorts as ymd string (YYYY-MM-DD) => lex works
+      return sign * compare(safeStr(a).toLowerCase(), safeStr(b).toLowerCase());
+    });
+  }
+
+  function toggleSort(setter, current, key) {
+    if (current.key !== key) return setter({ key, dir: "asc" });
+    return setter({ key, dir: current.dir === "asc" ? "desc" : "asc" });
+  }
+
+  function sortIcon(current, key) {
+    if (current.key !== key) return "↕";
+    return current.dir === "asc" ? "↑" : "↓";
   }
 
   function fmtTime(v) {
@@ -929,6 +984,17 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                     >
                       By User
                     </button>
+                    <button
+                      className={
+                        "text-sm border px-3 py-1 rounded " +
+                        (reportTab === "ledger"
+                          ? "bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white"
+                          : "bg-white text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600")
+                      }
+                      onClick={() => setReportTab("ledger")}
+                    >
+                      Ledger
+                    </button>
                   </div>
 
                   {/* Tables */}
@@ -1008,7 +1074,89 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                           ))}
                         </tbody>
                       </table>
+                    ) : reportTab === "ledger" ? (
+                      <table className="w-full text-sm text-left text-slate-800 dark:text-slate-100">
+                        <thead className="bg-slate-100 sticky top-0 dark:bg-slate-700/50">
+                          <tr>
+                            {[
+                              ["date", "Date"],
+                              ["player", "Player"],
+                              ["status", "Status"],
+                              ["charge", "Charge"],
+                              ["paid", "Paid"],
+                              ["balance", "Net"],
+                              ["reservationId", "ResId"],
+                              ["userId", "UserId"],
+                            ].map(([key, label]) => (
+                              <th
+                                key={key}
+                                className="p-2 border-b border-slate-200 dark:border-slate-700 cursor-pointer select-none"
+                                style={
+                                  key === "date"
+                                    ? { width: "200px" }
+                                    : undefined
+                                }
+                                onClick={() =>
+                                  toggleSort(setLedgerSort, ledgerSort, key)
+                                }
+                                title="Click to sort"
+                              >
+                                <span className="inline-flex items-center gap-2">
+                                  {label}
+                                  <span className="text-xs opacity-70">
+                                    {sortIcon(ledgerSort, key)}
+                                  </span>
+                                </span>
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ledgerRows.map((r, i) => (
+                            <tr
+                              key={`${r.reservationId}-${r.player}-${i}`}
+                              className="hover:bg-slate-50 dark:hover:bg-slate-700/40"
+                            >
+                              <td
+                                className="p-2 border-b border-slate-200 dark:border-slate-700"
+                                style={{ width: "200px" }}
+                              >
+                                <div className="font-medium whitespace-nowrap">
+                                  {r.date}
+                                </div>
+                                <div className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                  {fmtTimeRange(r.start, r.end)}
+                                </div>
+                              </td>
+                              <td className="p-2 border-b border-slate-200 dark:border-slate-700">
+                                {r.player}
+                              </td>
+                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                <StatusPill status={r.status} />
+                              </td>
+                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                {money(r.charge)}
+                              </td>
+                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                {money(r.paid)}
+                              </td>
+                              <td
+                                className={`p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap font-semibold ${balanceColorClass(r.balance)}`}
+                              >
+                                {money(r.balance)}
+                              </td>
+                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                {r.reservationId}
+                              </td>
+                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                {r.userId || ""}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     ) : (
+                      /* "reservation" */
                       <table className="w-full text-sm text-left text-slate-800 dark:text-slate-100">
                         <thead className="bg-slate-100 sticky top-0 dark:bg-slate-700/50">
                           <tr>
