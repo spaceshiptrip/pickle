@@ -1171,7 +1171,9 @@ function listUsers_(ctx) {
         String(activeRaw).trim() === "1" ||
         String(activeRaw).toLowerCase() === "true";
 
-      var role = String(r[idx["Role"]] || "").toLowerCase().trim();
+      var role = String(r[idx["Role"]] || "")
+        .toLowerCase()
+        .trim();
       var name = String(r[idx["Name"]] || "").trim();
       var userId = String(r[idx["UserId"]] || "").trim();
 
@@ -1180,9 +1182,14 @@ function listUsers_(ctx) {
     .filter(function (u) {
       if (!u.active) return false;
       if (!u.name || !u.userId) return false;
+      var includeGuests =
+        ctx && String(ctx.role || "").toLowerCase() === "admin";
 
       return (
-        u.role === "admin" || u.role === "memberplus" || u.role === "member"
+        u.role === "admin" ||
+        u.role === "memberplus" ||
+        u.role === "member" ||
+        (includeGuests && u.role === "guest")
       );
     })
     .map(function (u) {
@@ -1362,14 +1369,11 @@ function reportSummary_(sessionUser, params) {
   };
 } /* reportSummary_ */
 
-
-
-
 function adminReport_(ctx, params) {
   requireRole_(ctx, ["admin"]);
 
   var from = (params.from || "").trim(); // YYYY-MM-DD
-  var to = (params.to || "").trim();     // YYYY-MM-DD
+  var to = (params.to || "").trim(); // YYYY-MM-DD
   var userId = (params.userId || "").trim();
 
   var preset = (params.preset || "month").trim();
@@ -1384,18 +1388,23 @@ function adminReport_(ctx, params) {
   var resById = {};
   for (var i = 0; i < resT.rows.length; i++) {
     var rr = resT.rows[i];
-    var id = rIdx["Id"] !== undefined ? String(rr[rIdx["Id"]] || "").trim() : "";
+    var id =
+      rIdx["Id"] !== undefined ? String(rr[rIdx["Id"]] || "").trim() : "";
     if (!id) continue;
 
     resById[id] = {
       Id: id,
-      Date: formatYmdFromAny_(rIdx["Date"] !== undefined ? rr[rIdx["Date"]] : ""),
-      Start: rIdx["Start"] !== undefined ? (rr[rIdx["Start"]] || "") : "",
-      End: rIdx["End"] !== undefined ? (rr[rIdx["End"]] || "") : "",
-      Court: rIdx["Court"] !== undefined ? (rr[rIdx["Court"]] || "") : "",
+      Date: formatYmdFromAny_(
+        rIdx["Date"] !== undefined ? rr[rIdx["Date"]] : "",
+      ),
+      Start: rIdx["Start"] !== undefined ? rr[rIdx["Start"]] || "" : "",
+      End: rIdx["End"] !== undefined ? rr[rIdx["End"]] || "" : "",
+      Court: rIdx["Court"] !== undefined ? rr[rIdx["Court"]] || "" : "",
       Status:
         rIdx["Status"] !== undefined
-          ? String(rr[rIdx["Status"]] || "reserved").toLowerCase().trim()
+          ? String(rr[rIdx["Status"]] || "reserved")
+              .toLowerCase()
+              .trim()
           : "reserved",
     };
   }
@@ -1406,17 +1415,22 @@ function adminReport_(ctx, params) {
   var aIdx = headerIndexMap_(attT.header);
 
   var presentCol =
-    aIdx["Present (1/0)"] !== undefined ? aIdx["Present (1/0)"] : aIdx["Present"];
+    aIdx["Present (1/0)"] !== undefined
+      ? aIdx["Present (1/0)"]
+      : aIdx["Present"];
   var playerCol =
     aIdx["Player Name"] !== undefined ? aIdx["Player Name"] : aIdx["Player"];
   var ridCol =
-    aIdx["ReservationId"] !== undefined ? aIdx["ReservationId"] : aIdx["ReservationID"];
-  var uidCol =
-    aIdx["UserId"] !== undefined ? aIdx["UserId"] : aIdx["UserID"];
+    aIdx["ReservationId"] !== undefined
+      ? aIdx["ReservationId"]
+      : aIdx["ReservationID"];
+  var uidCol = aIdx["UserId"] !== undefined ? aIdx["UserId"] : aIdx["UserID"];
   var dateCol = aIdx["Date"];
   var paidCol = aIdx["PAID"];
   var chargeCol =
-    aIdx["Charge (auto)"] !== undefined ? aIdx["Charge (auto)"] : aIdx["Charge"];
+    aIdx["Charge (auto)"] !== undefined
+      ? aIdx["Charge (auto)"]
+      : aIdx["Charge"];
 
   var rows = [];
   for (var j = 0; j < attT.rows.length; j++) {
@@ -1507,6 +1521,30 @@ function adminReport_(ctx, params) {
   // Groupings: byUser and byReservation (both useful for admin)
   var byUser = {};
   var byReservation = {};
+
+  // ✅ Seed "zero rows" for all active users so the UI can show users with no activity
+  // If a specific userId filter is passed, only seed that one.
+  var roster = listUsers_(ctx).users || [];
+  for (var ru = 0; ru < roster.length; ru++) {
+    var u = roster[ru];
+    var uid = String(u.UserId || "").trim();
+    if (!uid) continue;
+    if (userId && uid !== userId) continue;
+
+    if (!byUser[uid]) {
+      byUser[uid] = {
+        userId: uid,
+        players: {},
+        checkinsActive: 0,
+        chargesActive: 0,
+        paidActive: 0,
+        outstandingActive: 0,
+        paidCanceled: 0,
+        creditCanceled: 0,
+        netCollected: 0,
+      };
+    }
+  }
 
   for (var m = 0; m < rows.length; m++) {
     var r0 = rows[m];
@@ -1650,7 +1688,6 @@ function computeRange_(preset, from, to, now) {
   start.setDate(1);
   return { from: ymd_(start), to: ymd_(end) };
 }
-
 
 function formatYmdFromAny_(v) {
   if (!v) return "";

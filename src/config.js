@@ -3,7 +3,7 @@
 
 // Google Apps Script "web app" URL that writes to your Google Sheet.
 export const APP_SCRIPT_URL =
-    'https://script.google.com/macros/s/AKfycbz71LlLV3eswM-B5JxFb3DFDNeprcRRQK0_7Nz95QN6lNcrGF4gG27TQAyLQR8AWyPb/exec';
+  'https://script.google.com/macros/s/AKfycbx4E2ZuQu3bGZN9t9Mb9FuzbEHy5CStdMT5U8tMOrjBdbEFW5qM9SsGdQHFSZZ7P4z4/exec';
 
 // Venmo handle (e.g., '@John-Doe').
 export const VENMO_HANDLE = '@Jay-Torres-367';
