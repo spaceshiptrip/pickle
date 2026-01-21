@@ -84,6 +84,37 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
     return sortRows(normalized, ledgerSort);
   }, [reportRes, ledgerSort]);
 
+  // keys for the "By User" table
+  const [userSort, setUserSort] = useState({ key: "userId", dir: "asc" });
+
+  // map of userId -> user object (Name, etc.)
+  const [usersById, setUsersById] = useState({});
+
+  const userRows = useMemo(() => {
+    const raw = reportRes?.byUser || [];
+
+    const normalized = raw.map((u) => {
+      const userId = String(u.userId ?? "").trim();
+      const userObj = usersById[userId];
+      const userName = String(
+        u.userName ?? userObj?.Name ?? userObj?.name ?? "",
+      ).trim();
+
+      return {
+        ...u,
+        userId,
+        userName,
+        uniquePlayers: Number(u.uniquePlayers || 0),
+        checkinsActive: Number(u.checkinsActive || 0),
+        netCollected: Number(u.netCollected || 0),
+        creditCanceled: Number(u.creditCanceled || 0),
+        outstandingActive: Number(u.outstandingActive || 0),
+      };
+    });
+
+    return sortRows(normalized, userSort);
+  }, [reportRes, userSort, usersById]);
+
   // Shared UI classes (light + dark)
   const panelWrapClass =
     "mt-8 border rounded p-3 bg-gray-50 text-slate-900 border-slate-200 " +
@@ -184,6 +215,8 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
     try {
       const r = await apiGet({ action: "listreservations" });
       if (mounted && r.ok) setReservations(r.reservations);
+      if (isAdmin) await loadUsersIndex();
+
       await loadApprovals();
     } catch (e) {
       console.error(e);
@@ -230,6 +263,23 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
       setApprovalsError(e.message);
     }
     setApprovalsLoading(false);
+  }
+
+  async function loadUsersIndex() {
+    try {
+      const r = await apiGet({ action: "listusers" });
+      if (r?.ok && Array.isArray(r.users)) {
+        const m = {};
+        r.users.forEach((u) => {
+          const id = String(u.UserId ?? u.userId ?? "").trim();
+          if (id) m[id] = u;
+        });
+        if (mounted) setUsersById(m);
+      }
+    } catch (e) {
+      // non-fatal: the report still works without names
+      console.warn("listusers failed:", e);
+    }
   }
 
   async function approveGuest(requestId) {
@@ -330,7 +380,18 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
       const b = rb[key];
 
       // numeric keys
-      if (key === "charge" || key === "paid" || key === "balance") {
+      const numericKeys = new Set([
+        "charge",
+        "paid",
+        "balance",
+        "uniquePlayers",
+        "checkinsActive",
+        "netCollected",
+        "creditCanceled",
+        "outstandingActive",
+      ]);
+
+      if (numericKeys.has(key)) {
         return sign * compare(Number(a || 0), Number(b || 0));
       }
 
@@ -1156,39 +1217,51 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                         </tbody>
                       </table>
                     ) : (
-                      /* "reservation" */
                       <table className="w-full text-sm text-left text-slate-800 dark:text-slate-100">
                         <thead className="bg-slate-100 sticky top-0 dark:bg-slate-700/50">
                           <tr>
-                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">
-                              UserId
-                            </th>
-                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">
-                              Unique Players
-                            </th>
-                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">
-                              Check-ins
-                            </th>
-                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">
-                              Net Collected
-                            </th>
-                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">
-                              Canceled Credit
-                            </th>
-                            <th className="p-2 border-b border-slate-200 dark:border-slate-700">
-                              Outstanding
-                            </th>
+                            {[
+                              ["userId", "User"],
+                              ["uniquePlayers", "Unique Players"],
+                              ["checkinsActive", "Check-ins"],
+                              ["netCollected", "Net Collected"],
+                              ["creditCanceled", "Canceled Credit"],
+                              ["outstandingActive", "Outstanding"],
+                            ].map(([key, label]) => (
+                              <th
+                                key={key}
+                                className="p-2 border-b border-slate-200 dark:border-slate-700 cursor-pointer select-none"
+                                onClick={() =>
+                                  toggleSort(setUserSort, userSort, key)
+                                }
+                                title="Click to sort"
+                              >
+                                <span className="inline-flex items-center gap-2">
+                                  {label}
+                                  <span className="text-xs opacity-70">
+                                    {sortIcon(userSort, key)}
+                                  </span>
+                                </span>
+                              </th>
+                            ))}
                           </tr>
                         </thead>
+
                         <tbody>
-                          {(reportRes.byUser || []).map((u, i) => (
+                          {userRows.map((u, i) => (
                             <tr
                               key={u.userId || i}
                               className="hover:bg-slate-50 dark:hover:bg-slate-700/40"
                             >
                               <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
-                                {u.userId}
+                                <div className="font-medium">{u.userId}</div>
+                                {u.userName ? (
+                                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                                    {u.userName}
+                                  </div>
+                                ) : null}
                               </td>
+
                               <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
                                 {u.uniquePlayers}
                               </td>
