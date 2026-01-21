@@ -84,6 +84,8 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
     return sortRows(normalized, ledgerSort);
   }, [reportRes, ledgerSort]);
 
+  const [includeZeroUsers, setIncludeZeroUsers] = useState(true);
+
   // keys for the "By User" table
   const [userSort, setUserSort] = useState({ key: "userId", dir: "asc" });
 
@@ -93,12 +95,11 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
   const userRows = useMemo(() => {
     const raw = reportRes?.byUser || [];
 
-    const normalized = raw.map((u) => {
+    // Normalize rows coming from backend report
+    const fromReport = raw.map((u) => {
       const userId = String(u.userId ?? "").trim();
       const userObj = usersById[userId];
-      const userName = String(
-        u.userName ?? userObj?.Name ?? userObj?.name ?? "",
-      ).trim();
+      const userName = String(u.userName ?? pickUserName(userObj) ?? "").trim();
 
       return {
         ...u,
@@ -112,8 +113,35 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
       };
     });
 
-    return sortRows(normalized, userSort);
-  }, [reportRes, userSort, usersById]);
+    // Index by userId so we can fill missing users with zeros
+    const byId = {};
+    fromReport.forEach((r) => {
+      if (r.userId) byId[r.userId] = r;
+    });
+
+    let merged = fromReport;
+
+    // ✅ If desired, include everyone from Users sheet (listusers) with zeroes
+    if (includeZeroUsers && usersById && Object.keys(usersById).length > 0) {
+      merged = Object.keys(usersById).map((id) => {
+        const userObj = usersById[id];
+        const existing = byId[id];
+        if (existing) return existing;
+
+        return {
+          userId: id,
+          userName: pickUserName(userObj),
+          uniquePlayers: 0,
+          checkinsActive: 0,
+          netCollected: 0,
+          creditCanceled: 0,
+          outstandingActive: 0,
+        };
+      });
+    }
+
+    return sortRows(merged, userSort);
+  }, [reportRes, userSort, usersById, includeZeroUsers]);
 
   // Shared UI classes (light + dark)
   const panelWrapClass =
@@ -248,6 +276,10 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [showCancelConfirm]);
 
+  useEffect(() => {
+    window.__usersById = usersById;
+  }, [usersById]);
+
   async function loadApprovals() {
     setApprovalsLoading(true);
     setApprovalsError("");
@@ -277,7 +309,6 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
         if (mounted) setUsersById(m);
       }
     } catch (e) {
-      // non-fatal: the report still works without names
       console.warn("listusers failed:", e);
     }
   }
@@ -357,6 +388,33 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
     }
   }
 
+  function pickUserName(obj) {
+    if (!obj || typeof obj !== "object") return "";
+
+    // common direct keys
+    const direct =
+      obj.Name ??
+      obj.name ??
+      obj.FullName ??
+      obj.fullName ??
+      obj.DisplayName ??
+      obj.displayName ??
+      obj["User Name"] ??
+      obj["UserName"] ??
+      obj["Player Name"] ??
+      obj["PlayerName"];
+
+    if (direct != null) return String(direct).trim();
+
+    // case-insensitive fallback: find any key that equals "name" when lowercased
+    const key = Object.keys(obj).find(
+      (k) => String(k).toLowerCase() === "name",
+    );
+    if (key) return String(obj[key] ?? "").trim();
+
+    return "";
+  }
+
   function money(n) {
     const v = Number(n || 0);
     return v.toLocaleString(undefined, { style: "currency", currency: "USD" });
@@ -389,6 +447,8 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
         "netCollected",
         "creditCanceled",
         "outstandingActive",
+        "userId",
+        "reservationId", // (optional but nice)
       ]);
 
       if (numericKeys.has(key)) {
@@ -1217,72 +1277,89 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                         </tbody>
                       </table>
                     ) : (
-                      <table className="w-full text-sm text-left text-slate-800 dark:text-slate-100">
-                        <thead className="bg-slate-100 sticky top-0 dark:bg-slate-700/50">
-                          <tr>
-                            {[
-                              ["userId", "User"],
-                              ["uniquePlayers", "Unique Players"],
-                              ["checkinsActive", "Check-ins"],
-                              ["netCollected", "Net Collected"],
-                              ["creditCanceled", "Canceled Credit"],
-                              ["outstandingActive", "Outstanding"],
-                            ].map(([key, label]) => (
-                              <th
-                                key={key}
-                                className="p-2 border-b border-slate-200 dark:border-slate-700 cursor-pointer select-none"
-                                onClick={() =>
-                                  toggleSort(setUserSort, userSort, key)
-                                }
-                                title="Click to sort"
-                              >
-                                <span className="inline-flex items-center gap-2">
-                                  {label}
-                                  <span className="text-xs opacity-70">
-                                    {sortIcon(userSort, key)}
+                      <>
+                        {reportTab === "user" && (
+                          <label className="flex items-center gap-2 mb-2 text-xs text-slate-600 dark:text-slate-300">
+                            <input
+                              type="checkbox"
+                              checked={includeZeroUsers}
+                              onChange={(e) =>
+                                setIncludeZeroUsers(e.target.checked)
+                              }
+                            />
+                            Include users with zero activity
+                          </label>
+                        )}
+                        <table className="w-full text-sm text-left text-slate-800 dark:text-slate-100">
+                          <thead className="bg-slate-100 sticky top-0 dark:bg-slate-700/50">
+                            <tr>
+                              {[
+                                ["userId", "UserId"],
+                                ["userName", "Name"],
+                                ["uniquePlayers", "Unique Players"],
+                                ["checkinsActive", "Check-ins"],
+                                ["netCollected", "Net Collected"],
+                                ["creditCanceled", "Canceled Credit"],
+                                ["outstandingActive", "Outstanding"],
+                              ].map(([key, label]) => (
+                                <th
+                                  key={key}
+                                  className="p-2 border-b border-slate-200 dark:border-slate-700 cursor-pointer select-none"
+                                  onClick={() =>
+                                    toggleSort(setUserSort, userSort, key)
+                                  }
+                                  title="Click to sort"
+                                >
+                                  <span className="inline-flex items-center gap-2">
+                                    {label}
+                                    <span className="text-xs opacity-70">
+                                      {sortIcon(userSort, key)}
+                                    </span>
                                   </span>
-                                </span>
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-
-                        <tbody>
-                          {userRows.map((u, i) => (
-                            <tr
-                              key={u.userId || i}
-                              className="hover:bg-slate-50 dark:hover:bg-slate-700/40"
-                            >
-                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
-                                <div className="font-medium">{u.userId}</div>
-                                {u.userName ? (
-                                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                                    {u.userName}
-                                  </div>
-                                ) : null}
-                              </td>
-
-                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
-                                {u.uniquePlayers}
-                              </td>
-                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
-                                {u.checkinsActive}
-                              </td>
-                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
-                                {money(u.netCollected)}
-                              </td>
-                              <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
-                                {money(u.creditCanceled)}
-                              </td>
-                              <td
-                                className={`p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap font-semibold ${balanceColorClass(u.outstandingActive)}`}
-                              >
-                                {money(u.outstandingActive)}
-                              </td>
+                                </th>
+                              ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {userRows.map((u, i) => (
+                              <tr
+                                key={u.userId || i}
+                                className="hover:bg-slate-50 dark:hover:bg-slate-700/40"
+                              >
+                                <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap font-medium">
+                                  {u.userId}
+                                </td>
+
+                                <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap text-slate-600 dark:text-slate-300">
+                                  {u.userName || ""}
+                                </td>
+
+                                <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                  {u.uniquePlayers}
+                                </td>
+
+                                <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                  {u.checkinsActive}
+                                </td>
+
+                                <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                  {money(u.netCollected)}
+                                </td>
+
+                                <td className="p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                  {money(u.creditCanceled)}
+                                </td>
+
+                                <td
+                                  className={`p-2 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap font-semibold ${balanceColorClass(u.outstandingActive)}`}
+                                >
+                                  {money(u.outstandingActive)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </>
                     )}
                   </div>
 

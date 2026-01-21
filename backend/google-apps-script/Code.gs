@@ -1164,7 +1164,6 @@ function listUsers_(ctx) {
 
   var idx = headerIndexMap_(t.header);
 
-  // Only expose names of active member/admin users (and optionally active guests if you want)
   var rows = t.rows
     .map(function (r) {
       var activeRaw = r[idx["Active"]];
@@ -1172,42 +1171,42 @@ function listUsers_(ctx) {
         String(activeRaw).trim() === "1" ||
         String(activeRaw).toLowerCase() === "true";
 
-      var role = String(r[idx["Role"]] || "").toLowerCase();
+      var role = String(r[idx["Role"]] || "").toLowerCase().trim();
       var name = String(r[idx["Name"]] || "").trim();
+      var userId = String(r[idx["UserId"]] || "").trim();
 
-      return { active: active, role: role, name: name };
+      return { active: active, role: role, name: name, userId: userId };
     })
     .filter(function (u) {
       if (!u.active) return false;
-      if (!u.name) return false;
+      if (!u.name || !u.userId) return false;
 
-      // Keep dropdown clean: only show players that are real members/admins
-      // (Change to include guests if you want: role === 'guest')
       return (
         u.role === "admin" || u.role === "memberplus" || u.role === "member"
       );
     })
     .map(function (u) {
-      return { Name: u.name };
+      return { UserId: u.userId, Name: u.name };
     });
 
-  // Unique + sort
+  // Optional: de-dupe by UserId (NOT by name)
   var seen = {};
   var out = [];
   for (var i = 0; i < rows.length; i++) {
-    var nm = rows[i].Name;
-    var key = nm.toLowerCase();
-    if (!seen[key]) {
-      seen[key] = true;
-      out.push({ Name: nm });
+    var id = String(rows[i].UserId);
+    if (!seen[id]) {
+      seen[id] = true;
+      out.push(rows[i]);
     }
   }
+
+  // Optional: sort by Name for UI dropdown friendliness (safe now because UserId stays attached)
   out.sort(function (a, b) {
-    return a.Name.localeCompare(b.Name);
+    return String(a.Name).localeCompare(String(b.Name));
   });
 
   return { ok: true, users: out };
-}
+} /* listUsers_ */
 
 function listGroups_() {
   var sh = sheetByName(USERS_SHEET_NAME);
