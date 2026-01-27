@@ -57,7 +57,7 @@ function StatusPill({ status }) {
   );
 }
 
-export default function ReviewReports({ onClose }) {
+export default function ReviewReports({ user, onClose }) {
   const [preset, setPreset] = useState("30d"); // 'today' | 'week' | 'month' | '30d' | 'range'
   const [grouped, setGrouped] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -67,6 +67,9 @@ export default function ReviewReports({ onClose }) {
   /* Added: custom range state (only used when preset === 'range') */
   const [rangeFrom, setRangeFrom] = useState(() => ymd(new Date()));
   const [rangeTo, setRangeTo] = useState(() => ymd(new Date()));
+
+  const [reportUsers, setReportUsers] = useState([]);
+  const [selectedUserId, setSelectedUserId] = useState("");
 
   const range = useMemo(() => {
     const today = new Date();
@@ -98,12 +101,66 @@ export default function ReviewReports({ onClose }) {
   }, [preset, rangeFrom, rangeTo]);
 
   useEffect(() => {
+    const isAdmin = user?.role === "admin";
+    if (!isAdmin) return;
+
     let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await apiGet("listusers", {});
+        const list = Array.isArray(res?.users) ? res.users : [];
+
+        if (cancelled) return;
+
+        const normalized = list
+          .map((u) => {
+            const userId = String(u?.UserId ?? u?.userId ?? u?.id ?? "").trim();
+            const name = String(
+              u?.Name ?? u?.name ?? u?.displayName ?? "",
+            ).trim();
+            return { userId, name };
+          })
+          .filter((u) => u.userId && u.name);
+
+        setReportUsers(normalized);
+
+        // Default selection to "me" if not set
+        const myId = String(user?.UserId ?? user?.userId ?? "").trim();
+        if (!selectedUserId && myId) setSelectedUserId(myId);
+      } catch (e) {
+        if (!cancelled) {
+          setReportUsers([]);
+          setErr(e?.message || "Failed to load user list");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.role, user?.UserId, user?.userId, selectedUserId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
     async function load() {
       setLoading(true);
       setErr("");
+
       try {
-        const res = await apiGet({ action: "reportsummary", ...range });
+        const isAdmin = user?.role === "admin";
+        const myId = String(user?.UserId ?? user?.userId ?? "").trim();
+        const viewId = isAdmin ? String(selectedUserId || myId).trim() : myId;
+
+        const params = { from: range.from, to: range.to };
+
+        // Only pass forUserId when admin is viewing someone else
+        if (isAdmin && viewId && myId && viewId !== myId) {
+          params.forUserId = viewId;
+        }
+
+        const res = await apiGet("reportsummary", params);
         if (!cancelled) setData(res);
       } catch (e) {
         if (!cancelled) setErr(e?.message || "Failed to load reports");
@@ -111,21 +168,36 @@ export default function ReviewReports({ onClose }) {
         if (!cancelled) setLoading(false);
       }
     }
+
     load();
+
     return () => {
       cancelled = true;
     };
-  }, [range.from, range.to]);
+  }, [
+    range.from,
+    range.to,
+    selectedUserId,
+    user?.role,
+    user?.UserId,
+    user?.userId,
+  ]);
 
   const totals = data?.totals || { plays: 0, charges: 0, paid: 0, balance: 0 };
   const rows = data?.byReservation || [];
 
   const balanceClass = balanceColorClass(totals.balance);
 
+  const myId = String(user?.UserId ?? user?.userId ?? "").trim();
+  const myName = String(user?.name ?? user?.Name ?? "Me").trim();
+
   return (
     <div
       className="fixed inset-0 z-50 overflow-y-auto overscroll-contain"
-      style={{ backgroundColor: "rgba(0,0,0,0.5)", WebkitOverflowScrolling: "touch" }}
+      style={{
+        backgroundColor: "rgba(0,0,0,0.5)",
+        WebkitOverflowScrolling: "touch",
+      }}
       role="dialog"
       aria-modal="true"
       onMouseDown={(e) => {
@@ -162,6 +234,37 @@ export default function ReviewReports({ onClose }) {
           <div className="p-4 space-y-4">
             {/* Presets */}
             <div className="flex flex-wrap gap-2">
+              {user?.role === "admin" && (
+                <div className="mt-2">
+                  <label className="block text-xs text-slate-600 dark:text-slate-300 mb-1">
+                    Viewing report for
+                  </label>
+
+                  <select
+                    className="w-full rounded-lg border border-slate-300 bg-white p-2 text-sm
+             dark:border-slate-700 dark:bg-slate-900"
+                    value={selectedUserId || myId}
+                    onChange={(e) => setSelectedUserId(e.target.value)}
+                  >
+                    <option value={myId}>{myName} (me)</option>
+
+                    {reportUsers
+                      .filter((u) => String(u.userId) !== String(myId))
+                      .map((u) => (
+                        <option key={u.userId} value={u.userId}>
+                          {u.name}
+                        </option>
+                      ))}
+                  </select>
+                  {data?.reportFor?.name && (
+                    <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Report for:{" "}
+                      <span className="font-medium">{data.reportFor.name}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <PresetChip
                 label="Today"
                 active={preset === "today"}

@@ -1236,14 +1236,39 @@ function listGroups_() {
   return { ok: true, groups: groups };
 }
 
+
 function reportSummary_(sessionUser, params) {
-  var userId = String(
-    sessionUser.UserId || sessionUser.userId || sessionUser.id,
-  );
+  params = params || {};
 
   var tz = Session.getScriptTimeZone();
   var today = new Date();
 
+  // ---- Resolve target user (default: self) ----
+  var selfUserId = String(
+    sessionUser.UserId || sessionUser.userId || sessionUser.id || "",
+  ).trim();
+
+  var isAdmin =
+    String(sessionUser.Role || sessionUser.role || "")
+      .toLowerCase()
+      .trim() === "admin";
+
+  var targetUserId = selfUserId;
+
+  // Admin can request a report for another user
+  var forUserId =
+    params.forUserId !== undefined && params.forUserId !== null
+      ? String(params.forUserId).trim()
+      : "";
+
+  if (forUserId) {
+    if (!isAdmin) throw new Error("forUserId is admin-only");
+    targetUserId = forUserId;
+  }
+
+  if (!targetUserId) throw new Error("missing_user_id");
+
+  // ---- Date range ----
   // Default range: last 30 days through today
   var fromStr = params.from || "";
   var toStr = params.to || "";
@@ -1256,11 +1281,23 @@ function reportSummary_(sessionUser, params) {
   // Normalize end-of-day inclusive
   to = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999);
 
+  // ---- Read Attendance ----
   var sh = getSheet_(ATTENDANCE_SHEET_NAME);
   var values = sh.getDataRange().getValues();
+
+  // Helper: resolve name for UI label (best effort)
+  var reportForName = null;
+  if (isAdmin && targetUserId !== selfUserId) {
+    var u = findUserById_(targetUserId);
+    reportForName = u && u.Name ? String(u.Name).trim() : null;
+  } else {
+    reportForName = sessionUser.Name ? String(sessionUser.Name).trim() : null;
+  }
+
   if (values.length < 2) {
     return {
-      userId: userId,
+      reportFor: { userId: targetUserId, name: reportForName },
+      userId: targetUserId, // keep existing field for backward compat
       range: { from: formatYmd_(from, tz), to: formatYmd_(to, tz) },
       totals: { plays: 0, charges: 0, paid: 0, balance: 0 },
       byReservation: [],
@@ -1281,8 +1318,8 @@ function reportSummary_(sessionUser, params) {
   for (var i = 0; i < rows.length; i++) {
     var r = rows[i];
 
-    var rUserId = String(r[idx["UserId"]] || "");
-    if (rUserId !== userId) continue;
+    var rUserId = String(r[idx["UserId"]] || "").trim();
+    if (rUserId !== String(targetUserId)) continue;
 
     var present = Number(r[idx["Present (1/0)"]] || r[idx["Present"]] || 0);
     if (present !== 1) continue;
@@ -1322,7 +1359,7 @@ function reportSummary_(sessionUser, params) {
       byRes[reservationId] = {
         reservationId: reservationId,
         date: formatYmd_(dt, tz),
-        status: status, // ✅ NEW for UI
+        status: status,
         players: [],
         charges: 0,
         paid: 0,
@@ -1357,7 +1394,8 @@ function reportSummary_(sessionUser, params) {
     });
 
   return {
-    userId: userId,
+    reportFor: { userId: targetUserId, name: reportForName }, // ✅ NEW
+    userId: targetUserId, // keep existing field
     range: { from: formatYmd_(from, tz), to: formatYmd_(to, tz) },
     totals: {
       plays: totals.plays,
@@ -1367,7 +1405,9 @@ function reportSummary_(sessionUser, params) {
     },
     byReservation: byReservation,
   };
+
 } /* reportSummary_ */
+
 
 function adminReport_(ctx, params) {
   requireRole_(ctx, ["admin"]);
