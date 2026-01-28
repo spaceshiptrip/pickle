@@ -1,53 +1,69 @@
-import React, { useEffect, useState } from 'react';
-import { authApi } from '../api';
-import logo from '../assets/AthPicklersLogo.png';
-import { setPostLoginRedirect } from '../utils/postLoginRedirect';
+// src/components/AuthView.jsx
+import React, { useEffect, useState } from "react";
+import { authApi } from "../api";
+import logo from "../assets/AthPicklersLogo.png";
+import { setPostLoginRedirect } from "../utils/postLoginRedirect";
 
+export default function AuthView({
+  onLoginSuccess,
+  theme = "light",
+  onToggleTheme,
+}) {
+  const [tab, setTab] = useState("member");
+  const [loginId, setLoginId] = useState("");
+  const [mode, setMode] = useState("login"); // 'login' | 'recover'
+  const [recoverEmail, setRecoverEmail] = useState("");
 
-export default function AuthView({ onLoginSuccess, theme = 'light', onToggleTheme }) {
-  const [tab, setTab] = useState('member');
-  const [loginId, setLoginId] = useState('');
-  const [mode, setMode] = useState('login'); // 'login' | 'recover'
-  const [recoverEmail, setRecoverEmail] = useState('');
+  const [pin, setPin] = useState("");
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
 
-
-  const [pin, setPin] = useState('');
-  const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
+  const [pendingLogin, setPendingLogin] = useState(false);
+
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
   const [buildInfo, setBuildInfo] = useState(null);
 
   useEffect(() => {
-    fetch('/version.json')
-	    .then((r) => r.json())
-		    .then(setBuildInfo)
-			    .catch(() => {});
-				}, []);
-
+    fetch("/version.json")
+      .then((r) => r.json())
+      .then(setBuildInfo)
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
-    setError('');
-    setMessage('');
+    setError("");
+    setMessage("");
     setLoading(false);
-    setMode('login'); // ✅ always return to normal form when switching tabs
+    setPendingLogin(false);
+    setMode("login"); // ✅ always return to normal form when switching tabs
   }, [tab]);
 
-
+  // ✅ When parent unmounts AuthView (user becomes non-null), this component disappears.
+  // We keep pendingLogin true after success so button stays "Logging in…" until that happens.
 
   const handleMemberLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
-    setMessage('');
+    setPendingLogin(false);
+    setError("");
+    setMessage("");
+
     try {
       const res = await authApi.loginWithPin(loginId, pin);
 
-      if (res.ok && res.session) onLoginSuccess(res.session);
+      if (res?.ok && res?.session) {
+        // ✅ keep showing "Logging in…" until calendar view shows (AuthView unmounts)
+        setPendingLogin(true);
+        onLoginSuccess(res.session);
+        return;
+      }
+
+      setError(res?.error || "Login failed");
     } catch (err) {
-      setError(err.message || 'Login failed');
+      setError(err?.message || "Login failed");
     } finally {
       setLoading(false);
     }
@@ -56,42 +72,43 @@ export default function AuthView({ onLoginSuccess, theme = 'light', onToggleThem
   const handleGuestRequest = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
-    setMessage('');
+    setPendingLogin(false);
+    setError("");
+    setMessage("");
     try {
       const res = await authApi.requestMagicLink(email, name);
       if (res.ok) setMessage(res.message);
     } catch (err) {
-      setError(err.message || 'Request failed');
+      setError(err.message || "Request failed");
     } finally {
       setLoading(false);
     }
   };
-
 
   const handleRecoveryRequest = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
-    setMessage('');
+    setPendingLogin(false);
+    setError("");
+    setMessage("");
 
     try {
       // ✅ tell App.jsx where to go after token login
-      setPostLoginRedirect('/settings');
+      setPostLoginRedirect("/settings");
 
       // ✅ request magic link (name optional / blank is fine)
-      const res = await authApi.requestMagicLink(recoverEmail, '');
-      if (res.ok) setMessage(res.message || 'Check your email for a recovery link.');
+      const res = await authApi.requestMagicLink(recoverEmail, "");
+      if (res.ok)
+        setMessage(res.message || "Check your email for a recovery link.");
     } catch (err) {
-      setError(err.message || 'Request failed');
+      setError(err.message || "Request failed");
     } finally {
       setLoading(false);
     }
   };
 
-
-
-  const isDark = theme === 'dark';
+  const isDark = theme === "dark";
+  const busy = loading || pendingLogin;
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex items-start sm:items-center justify-center p-4 pt-8 sm:pt-4">
@@ -108,7 +125,7 @@ export default function AuthView({ onLoginSuccess, theme = 'light', onToggleThem
             aria-label="Toggle theme"
             title="Toggle theme"
           >
-            {isDark ? '☀️ Light' : '🌙 Dark'}
+            {isDark ? "☀️ Light" : "🌙 Dark"}
           </button>
         )}
 
@@ -134,175 +151,176 @@ export default function AuthView({ onLoginSuccess, theme = 'light', onToggleThem
         <div className="flex bg-slate-200 dark:bg-slate-900/50 p-1 rounded-xl mb-8">
           <button
             type="button"
-            onClick={() => setTab('member')}
+            onClick={() => setTab("member")}
             className={`flex-1 py-2 rounded-lg font-bold transition-all ${
-              tab === 'member'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'text-slate-700 hover:text-slate-900 hover:bg-white/60 dark:text-slate-300 dark:hover:text-white dark:hover:bg-white/10'
+              tab === "member"
+                ? "bg-indigo-600 text-white shadow"
+                : "text-slate-700 hover:text-slate-900 hover:bg-white/60 dark:text-slate-300 dark:hover:text-white dark:hover:bg-white/10"
             }`}
           >
             Member
           </button>
           <button
             type="button"
-            onClick={() => setTab('guest')}
+            onClick={() => setTab("guest")}
             className={`flex-1 py-2 rounded-lg font-bold transition-all ${
-              tab === 'guest'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'text-slate-700 hover:text-slate-900 hover:bg-white/60 dark:text-slate-300 dark:hover:text-white dark:hover:bg-white/10'
+              tab === "guest"
+                ? "bg-indigo-600 text-white shadow"
+                : "text-slate-700 hover:text-slate-900 hover:bg-white/60 dark:text-slate-300 dark:hover:text-white dark:hover:bg-white/10"
             }`}
           >
             Guest
           </button>
         </div>
 
-{/* FORMS */}
-{mode === 'recover' ? (
-  <form onSubmit={handleRecoveryRequest} className="space-y-6">
-    <div>
-      <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
-        Email Address
-      </label>
-      <input
-        type="email"
-        value={recoverEmail}
-        onChange={(e) => setRecoverEmail(e.target.value)}
-        placeholder="name@example.com"
-        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
+        {/* FORMS */}
+        {mode === "recover" ? (
+          <form onSubmit={handleRecoveryRequest} className="space-y-6">
+            <div>
+              <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
+                Email Address
+              </label>
+              <input
+                type="email"
+                value={recoverEmail}
+                onChange={(e) => setRecoverEmail(e.target.value)}
+                placeholder="name@example.com"
+                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
                    text-slate-900 dark:text-white placeholder:text-slate-400
                    focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-        required
-      />
-      <p className="mt-2 text-[10px] text-slate-600 dark:text-slate-500">
-        We’ll email you a one-time magic link. After clicking it, you’ll be taken directly to Settings.
-      </p>
-    </div>
+                required
+              />
+              <p className="mt-2 text-[10px] text-slate-600 dark:text-slate-500">
+                We’ll email you a one-time magic link. After clicking it, you’ll
+                be taken directly to Settings.
+              </p>
+            </div>
 
-    <button
-      disabled={loading}
-      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl transition disabled:opacity-50"
-    >
-      {loading ? 'Sending…' : 'Send recovery link'}
-    </button>
+            <button
+              disabled={loading}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl transition disabled:opacity-50"
+            >
+              {loading ? "Sending…" : "Send recovery link"}
+            </button>
 
-    <div className="text-center">
-      <button
-        type="button"
-        onClick={() => {
-          setMode('login');
-          setRecoverEmail('');
-          setError('');
-          setMessage('');
-        }}
-        className="text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:underline"
-      >
-        Back to login
-      </button>
-    </div>
-  </form>
-) : tab === 'member' ? (
-  <form onSubmit={handleMemberLogin} className="space-y-6">
-    <div>
-      <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
-        Login
-      </label>
-      <input
-        type="text"
-        value={loginId}
-        onChange={(e) => setLoginId(e.target.value)}
-        placeholder="8185551234 or name@example.com"
-        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("login");
+                  setRecoverEmail("");
+                  setError("");
+                  setMessage("");
+                }}
+                className="text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:underline"
+              >
+                Back to login
+              </button>
+            </div>
+          </form>
+        ) : tab === "member" ? (
+          <form onSubmit={handleMemberLogin} className="space-y-6">
+            <div>
+              <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
+                Login
+              </label>
+              <input
+                type="text"
+                value={loginId}
+                onChange={(e) => setLoginId(e.target.value)}
+                placeholder="8185551234 or name@example.com"
+                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
                    text-slate-900 dark:text-white placeholder:text-slate-400
                    focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-        required
-      />
-    </div>
+                required
+              />
+            </div>
 
-    <div>
-      <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
-        PIN
-      </label>
-      <input
-        type="password"
-        value={pin}
-        onChange={(e) => setPin(e.target.value)}
-        placeholder="Your secret PIN"
-        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
+            <div>
+              <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
+                PIN
+              </label>
+              <input
+                type="password"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                placeholder="Your secret PIN"
+                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
                    text-slate-900 dark:text-white placeholder:text-slate-400
                    focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-        required
-      />
-    </div>
+                required
+              />
+            </div>
 
-    <button
-      disabled={loading}
-      className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-xl transition disabled:opacity-50"
-    >
-      {loading ? 'Logging in…' : 'Sign In'}
-    </button>
+            <button
+              disabled={busy}
+              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-xl transition disabled:opacity-50"
+            >
+              {busy ? "Logging in…" : "Sign In"}
+            </button>
 
-    <div className="text-center">
-      <button
-        type="button"
-        onClick={() => {
-          setPostLoginRedirect('/settings');
-          setMode('recover');
-          setRecoverEmail('');
-          setError('');
-          setMessage('');
-        }}
-        className="text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:underline"
-      >
-        Forgot PIN / Update Login
-      </button>
-    </div>
-  </form>
-) : (
-  <form onSubmit={handleGuestRequest} className="space-y-6">
-    <div>
-      <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
-        Full Name
-      </label>
-      <input
-        type="text"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="John Doe"
-        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setPostLoginRedirect("/settings");
+                  setMode("recover");
+                  setRecoverEmail("");
+                  setError("");
+                  setMessage("");
+                }}
+                className="text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:underline"
+              >
+                Forgot PIN / Update Login
+              </button>
+            </div>
+          </form>
+        ) : (
+          <form onSubmit={handleGuestRequest} className="space-y-6">
+            <div>
+              <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
+                Full Name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="John Doe"
+                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
                    text-slate-900 dark:text-white placeholder:text-slate-400
                    focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-        required
-      />
-    </div>
+                required
+              />
+            </div>
 
-    <div>
-      <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
-        Email Address
-      </label>
-      <input
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="friend@example.com"
-        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
+            <div>
+              <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-2">
+                Email Address
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="friend@example.com"
+                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3
                    text-slate-900 dark:text-white placeholder:text-slate-400
                    focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-        required
-      />
-      <p className="mt-2 text-[10px] text-slate-600 dark:text-slate-500">
-        We’ll email you a one-time magic link.
-      </p>
-    </div>
+                required
+              />
+              <p className="mt-2 text-[10px] text-slate-600 dark:text-slate-500">
+                We’ll email you a one-time magic link.
+              </p>
+            </div>
 
-    <button
-      disabled={loading}
-      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl transition disabled:opacity-50"
-    >
-      {loading ? 'Sending…' : 'Request Magic Link'}
-    </button>
-  </form>
-)}
-{/* FORMS END */}
+            <button
+              disabled={loading}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl transition disabled:opacity-50"
+            >
+              {loading ? "Sending…" : "Request Magic Link"}
+            </button>
+          </form>
+        )}
+        {/* FORMS END */}
 
         {/* MESSAGES */}
         {message && (
@@ -326,4 +344,3 @@ export default function AuthView({ onLoginSuccess, theme = 'light', onToggleThem
     </div>
   );
 }
-
