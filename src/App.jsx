@@ -280,7 +280,8 @@ export default function App() {
           />
         )}
 
-        {showReports && <ReviewReports onClose={() => setShowReports(false)} />}
+        {showReports && <ReviewReports user={user} onClose={() => setShowReports(false)} />}
+
       </div>
 
       {/* Footer bar (black strip across full width) */}
