@@ -191,8 +191,10 @@ export default function ReviewReports({ user, onClose }) {
   const myId = String(user?.UserId ?? user?.userId ?? "").trim();
   const myName = String(user?.name ?? user?.Name ?? "Me").trim();
 
+  const isAdmin = user?.role === "admin";
+
   const totalUsersCount =
-    user?.role === "admin"
+    isAdmin
       ? 1 + reportUsers.filter((u) => String(u.userId) !== String(myId)).length
       : 0;
 
@@ -221,7 +223,20 @@ export default function ReviewReports({ user, onClose }) {
         >
           <div className="flex items-start justify-between p-4 border-b border-slate-200 dark:border-slate-800">
             <div>
-              <div className="text-lg font-semibold">Reports</div>
+              <div className="flex items-center gap-2">
+                <div className="text-lg font-semibold">Reports</div>
+
+                {isAdmin && (
+                  <span
+                    className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-extrabold uppercase tracking-wide
+                               bg-amber-100 text-amber-800 border-amber-200
+                               dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30"
+                  >
+                    Admin view
+                  </span>
+                )}
+              </div>
+
               <div className="text-sm text-slate-600 dark:text-slate-300">
                 {range.from} → {range.to}
               </div>
@@ -238,9 +253,10 @@ export default function ReviewReports({ user, onClose }) {
 
           <div className="p-4 space-y-4">
             {/* Presets */}
-            <div className="flex flex-wrap gap-2">
-              {user?.role === "admin" && (
-                <div className="mt-2">
+            {isAdmin ? (
+              <div className="space-y-3">
+                {/* Admin-only dropdown on its own row (mobile friendly) */}
+                <div className="w-full">
                   <label className="block text-xs text-slate-600 dark:text-slate-300 mb-1">
                     Viewing report for{" "}
                     <span className="opacity-70">({totalUsersCount} users)</span>
@@ -248,7 +264,7 @@ export default function ReviewReports({ user, onClose }) {
 
                   <select
                     className="w-full rounded-lg border border-slate-300 bg-white p-2 text-sm
-             dark:border-slate-700 dark:bg-slate-900"
+                               dark:border-slate-700 dark:bg-slate-900"
                     value={selectedUserId || myId}
                     onChange={(e) => setSelectedUserId(e.target.value)}
                   >
@@ -262,6 +278,7 @@ export default function ReviewReports({ user, onClose }) {
                         </option>
                       ))}
                   </select>
+
                   {data?.reportFor?.name && (
                     <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                       Report for:{" "}
@@ -269,43 +286,83 @@ export default function ReviewReports({ user, onClose }) {
                     </div>
                   )}
                 </div>
-              )}
 
-              <PresetChip
-                label="Today"
-                active={preset === "today"}
-                onClick={() => setPreset("today")}
-              />
-              <PresetChip
-                label="This week"
-                active={preset === "week"}
-                onClick={() => setPreset("week")}
-              />
-              <PresetChip
-                label="This month"
-                active={preset === "month"}
-                onClick={() => setPreset("month")}
-              />
-              <PresetChip
-                label="Last 30 days"
-                active={preset === "30d"}
-                onClick={() => setPreset("30d")}
-              />
-              <PresetChip
-                label="Range"
-                active={preset === "range"}
-                onClick={() => setPreset("range")}
-              />
+                {/* Buttons row (kept clean for admin) */}
+                <div className="flex flex-wrap gap-2 items-center">
+                  <PresetChip
+                    label="Today"
+                    active={preset === "today"}
+                    onClick={() => setPreset("today")}
+                  />
+                  <PresetChip
+                    label="This week"
+                    active={preset === "week"}
+                    onClick={() => setPreset("week")}
+                  />
+                  <PresetChip
+                    label="This month"
+                    active={preset === "month"}
+                    onClick={() => setPreset("month")}
+                  />
+                  <PresetChip
+                    label="Last 30 days"
+                    active={preset === "30d"}
+                    onClick={() => setPreset("30d")}
+                  />
+                  <PresetChip
+                    label="Range"
+                    active={preset === "range"}
+                    onClick={() => setPreset("range")}
+                  />
 
-              <label className="ml-auto flex items-center gap-2 text-sm select-none">
-                <input
-                  type="checkbox"
-                  checked={grouped}
-                  onChange={(e) => setGrouped(e.target.checked)}
+                  <label className="sm:ml-auto flex items-center gap-2 text-sm select-none whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={grouped}
+                      onChange={(e) => setGrouped(e.target.checked)}
+                    />
+                    Group by reservation (+N names)
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                <PresetChip
+                  label="Today"
+                  active={preset === "today"}
+                  onClick={() => setPreset("today")}
                 />
-                Group by reservation (+N names)
-              </label>
-            </div>
+                <PresetChip
+                  label="This week"
+                  active={preset === "week"}
+                  onClick={() => setPreset("week")}
+                />
+                <PresetChip
+                  label="This month"
+                  active={preset === "month"}
+                  onClick={() => setPreset("month")}
+                />
+                <PresetChip
+                  label="Last 30 days"
+                  active={preset === "30d"}
+                  onClick={() => setPreset("30d")}
+                />
+                <PresetChip
+                  label="Range"
+                  active={preset === "range"}
+                  onClick={() => setPreset("range")}
+                />
+
+                <label className="ml-auto flex items-center gap-2 text-sm select-none">
+                  <input
+                    type="checkbox"
+                    checked={grouped}
+                    onChange={(e) => setGrouped(e.target.checked)}
+                  />
+                  Group by reservation (+N names)
+                </label>
+              </div>
+            )}
 
             {/* Range inputs */}
             {preset === "range" && (
