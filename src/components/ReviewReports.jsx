@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { apiGet } from "../api";
 
 function ymd(d) {
@@ -71,6 +71,19 @@ export default function ReviewReports({ user, onClose }) {
   const [reportUsers, setReportUsers] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState("");
 
+  // Admin search + picker UI
+  const [userQuery, setUserQuery] = useState("");
+  const [userPickerOpen, setUserPickerOpen] = useState(false);
+  const [activeUserIndex, setActiveUserIndex] = useState(0);
+
+  const userQueryRef = useRef(null);
+  const userPickerRef = useRef(null);
+
+  const myId = String(user?.UserId ?? user?.userId ?? "").trim();
+  const myName = String(user?.name ?? user?.Name ?? "Me").trim();
+  const isAdmin = user?.role === "admin";
+  const effectiveSelectedUserId = String(selectedUserId || myId).trim();
+
   const range = useMemo(() => {
     const today = new Date();
     const start = new Date(today);
@@ -100,8 +113,55 @@ export default function ReviewReports({ user, onClose }) {
     return { from: ymd(start), to: ymd(today) };
   }, [preset, rangeFrom, rangeTo]);
 
+  // "/" focuses admin search
   useEffect(() => {
-    const isAdmin = user?.role === "admin";
+    if (!isAdmin) return;
+
+    function onKeyDown(e) {
+      // avoid interfering with browser shortcuts / IME / etc
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      const key = e.key;
+      const code = e.code;
+
+      const isSlash = key === "/" || code === "Slash";
+      if (!isSlash) return;
+
+      const tag = String(document.activeElement?.tagName || "").toLowerCase();
+      const isTyping =
+        tag === "input" || tag === "textarea" || tag === "select";
+
+      if (isTyping) return;
+
+      e.preventDefault();
+      userQueryRef.current?.focus?.();
+      setUserPickerOpen(true);
+    }
+
+    window.addEventListener("keydown", onKeyDown, { passive: false });
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isAdmin]);
+
+  // click outside closes picker
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    function onDown(e) {
+      const el = userPickerRef.current;
+      if (!el) return;
+      if (el.contains(e.target)) return;
+      setUserPickerOpen(false);
+    }
+
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("touchstart", onDown);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("touchstart", onDown);
+    };
+  }, [isAdmin]);
+
+  useEffect(() => {
     if (!isAdmin) return;
 
     let cancelled = false;
@@ -126,7 +186,6 @@ export default function ReviewReports({ user, onClose }) {
         setReportUsers(normalized);
 
         // Default selection to "me" if not set
-        const myId = String(user?.UserId ?? user?.userId ?? "").trim();
         if (!selectedUserId && myId) setSelectedUserId(myId);
       } catch (e) {
         if (!cancelled) {
@@ -139,7 +198,7 @@ export default function ReviewReports({ user, onClose }) {
     return () => {
       cancelled = true;
     };
-  }, [user?.role, user?.UserId, user?.userId, selectedUserId]);
+  }, [isAdmin, myId, selectedUserId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -149,8 +208,6 @@ export default function ReviewReports({ user, onClose }) {
       setErr("");
 
       try {
-        const isAdmin = user?.role === "admin";
-        const myId = String(user?.UserId ?? user?.userId ?? "").trim();
         const viewId = isAdmin ? String(selectedUserId || myId).trim() : myId;
 
         const params = { from: range.from, to: range.to };
@@ -174,29 +231,86 @@ export default function ReviewReports({ user, onClose }) {
     return () => {
       cancelled = true;
     };
-  }, [
-    range.from,
-    range.to,
-    selectedUserId,
-    user?.role,
-    user?.UserId,
-    user?.userId,
-  ]);
+  }, [range.from, range.to, selectedUserId, isAdmin, myId]);
 
   const totals = data?.totals || { plays: 0, charges: 0, paid: 0, balance: 0 };
   const rows = data?.byReservation || [];
 
   const balanceClass = balanceColorClass(totals.balance);
 
-  const myId = String(user?.UserId ?? user?.userId ?? "").trim();
-  const myName = String(user?.name ?? user?.Name ?? "Me").trim();
-
-  const isAdmin = user?.role === "admin";
-
   const totalUsersCount =
     isAdmin
       ? 1 + reportUsers.filter((u) => String(u.userId) !== String(myId)).length
       : 0;
+
+  const filteredUsers = useMemo(() => {
+    const q = String(userQuery || "").trim().toLowerCase();
+    const others = reportUsers.filter((u) => String(u.userId) !== String(myId));
+
+    if (!q) return others;
+
+    return others.filter((u) => {
+      const name = String(u.name || "").toLowerCase();
+      const id = String(u.userId || "").toLowerCase();
+      return name.includes(q) || id.includes(q);
+    });
+  }, [userQuery, reportUsers, myId]);
+
+  const pickerItems = useMemo(() => {
+    if (!isAdmin) return [];
+
+    const me = { userId: myId, name: `${myName} (me)` };
+    const items = [me, ...filteredUsers];
+
+    // keep selection visible even if it doesn't match current query
+    const selId = String(effectiveSelectedUserId || "").trim();
+    if (selId && selId !== String(myId)) {
+      const inItems = items.some((u) => String(u.userId) === selId);
+      if (!inItems) {
+        const hit = reportUsers.find((u) => String(u.userId) === selId);
+        if (hit?.userId && hit?.name) items.splice(1, 0, hit);
+      }
+    }
+
+    return items;
+  }, [
+    isAdmin,
+    myId,
+    myName,
+    filteredUsers,
+    effectiveSelectedUserId,
+    reportUsers,
+  ]);
+
+  // keep active index in bounds when list changes
+  useEffect(() => {
+    if (!isAdmin) return;
+    setActiveUserIndex((i) => {
+      const max = Math.max(0, pickerItems.length - 1);
+      return Math.min(i, max);
+    });
+  }, [isAdmin, pickerItems.length]);
+
+  const selectedUserName = (() => {
+    if (!isAdmin) return "";
+    if (effectiveSelectedUserId && String(effectiveSelectedUserId) === String(myId))
+      return myName;
+
+    const hit = reportUsers.find(
+      (u) => String(u.userId) === String(effectiveSelectedUserId),
+    );
+    if (hit?.name) return hit.name;
+
+    const fromReport = String(data?.reportFor?.name || "").trim();
+    if (fromReport) return fromReport;
+
+    return effectiveSelectedUserId || "User";
+  })();
+
+  function pickUser(id) {
+    setSelectedUserId(id);
+    setUserPickerOpen(false);
+  }
 
   return (
     <div
@@ -232,7 +346,7 @@ export default function ReviewReports({ user, onClose }) {
                                bg-amber-100 text-amber-800 border-amber-200
                                dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30"
                   >
-                    Admin view
+                    Admin view · {selectedUserName} · #{effectiveSelectedUserId || "?"}
                   </span>
                 )}
               </div>
@@ -251,33 +365,126 @@ export default function ReviewReports({ user, onClose }) {
             </button>
           </div>
 
-          <div className="p-4 space-y-4">
+          {/* content wrapper needs relative for overlay */}
+          <div className="relative p-4 space-y-4">
+            {/* ✅ overlay spinner while report is loading */}
+            {loading && (
+              <div className="absolute inset-0 z-20 bg-slate-900/10 dark:bg-slate-900/30 backdrop-blur-[1px] flex items-center justify-center rounded-b-2xl">
+                <div className="px-4 py-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow">
+                  <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                    <Spinner className="h-4 w-4" />
+                    Loading…
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Presets */}
             {isAdmin ? (
               <div className="space-y-3">
-                {/* Admin-only dropdown on its own row (mobile friendly) */}
-                <div className="w-full">
+                <div className="w-full" ref={userPickerRef}>
                   <label className="block text-xs text-slate-600 dark:text-slate-300 mb-1">
                     Viewing report for{" "}
                     <span className="opacity-70">({totalUsersCount} users)</span>
                   </label>
 
-                  <select
-                    className="w-full rounded-lg border border-slate-300 bg-white p-2 text-sm
-                               dark:border-slate-700 dark:bg-slate-900"
-                    value={selectedUserId || myId}
-                    onChange={(e) => setSelectedUserId(e.target.value)}
-                  >
-                    <option value={myId}>{myName} (me)</option>
+                  <div className="relative">
+                    <input
+                      ref={userQueryRef}
+                      value={userQuery}
+                      onChange={(e) => {
+                        setUserQuery(e.target.value);
+                        setUserPickerOpen(true);
+                        setActiveUserIndex(0);
+                      }}
+                      onFocus={() => setUserPickerOpen(true)}
+                      onKeyDown={(e) => {
+                        if (!userPickerOpen && (e.key === "ArrowDown" || e.key === "Enter")) {
+                          setUserPickerOpen(true);
+                          return;
+                        }
 
-                    {reportUsers
-                      .filter((u) => String(u.userId) !== String(myId))
-                      .map((u) => (
-                        <option key={u.userId} value={u.userId}>
-                          {u.name}
-                        </option>
-                      ))}
-                  </select>
+                        if (e.key === "Escape") {
+                          setUserPickerOpen(false);
+                          return;
+                        }
+
+                        if (e.key === "ArrowDown") {
+                          e.preventDefault();
+                          setUserPickerOpen(true);
+                          setActiveUserIndex((i) =>
+                            Math.min(i + 1, Math.max(0, pickerItems.length - 1)),
+                          );
+                          return;
+                        }
+
+                        if (e.key === "ArrowUp") {
+                          e.preventDefault();
+                          setActiveUserIndex((i) => Math.max(0, i - 1));
+                          return;
+                        }
+
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          const pick = pickerItems[activeUserIndex] || pickerItems[0];
+                          if (pick?.userId) pickUser(pick.userId);
+                          return;
+                        }
+                      }}
+                      placeholder='Search name or user id… (press "/")'
+                      className="w-full rounded-lg border border-slate-300 bg-white p-2 text-sm
+                                 dark:border-slate-700 dark:bg-slate-900"
+                    />
+
+                    {userPickerOpen && (
+                      <div
+                        className="absolute z-30 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden
+                                   dark:bg-slate-900 dark:border-slate-700"
+                        role="listbox"
+                      >
+                        <div className="max-h-60 overflow-auto">
+                          {pickerItems.length === 0 ? (
+                            <div className="p-3 text-sm text-slate-600 dark:text-slate-300">
+                              No matches
+                            </div>
+                          ) : (
+                            pickerItems.map((u, idx) => {
+                              const active = idx === activeUserIndex;
+                              const selected =
+                                String(u.userId) === String(effectiveSelectedUserId);
+
+                              return (
+                                <button
+                                  key={`${u.userId}-${idx}`}
+                                  type="button"
+                                  onMouseEnter={() => setActiveUserIndex(idx)}
+                                  onClick={() => pickUser(u.userId)}
+                                  className={
+                                    "w-full text-left px-3 py-2 text-sm flex items-center justify-between gap-3 " +
+                                    (active
+                                      ? "bg-slate-100 dark:bg-slate-800"
+                                      : "bg-white dark:bg-slate-900") +
+                                    (selected ? " font-semibold" : "")
+                                  }
+                                >
+                                  <span className="truncate">
+                                    {u.name}
+                                  </span>
+                                  <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">
+                                    #{u.userId}
+                                  </span>
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+
+                        <div className="px-3 py-2 text-[11px] text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700">
+                          ↑↓ to navigate · Enter to select · Esc to close
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   {data?.reportFor?.name && (
                     <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
@@ -287,7 +494,6 @@ export default function ReviewReports({ user, onClose }) {
                   )}
                 </div>
 
-                {/* Buttons row (kept clean for admin) */}
                 <div className="flex flex-wrap gap-2 items-center">
                   <PresetChip
                     label="Today"
@@ -430,19 +636,7 @@ export default function ReviewReports({ user, onClose }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {loading ? (
-                      <tr>
-                        <td
-                          colSpan={6}
-                          className="p-4 text-center text-slate-500 dark:text-slate-400"
-                        >
-                          <span className="inline-flex items-center gap-2">
-                            <Spinner className="h-4 w-4" />
-                            Loading…
-                          </span>
-                        </td>
-                      </tr>
-                    ) : rows.length === 0 ? (
+                    {rows.length === 0 && !loading ? (
                       <tr>
                         <td
                           className="p-3 text-slate-600 dark:text-slate-300"
