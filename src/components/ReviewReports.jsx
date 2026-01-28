@@ -108,7 +108,7 @@ export default function ReviewReports({ user, onClose }) {
 
     (async () => {
       try {
-        const res = await apiGet("listusers", {});
+        const res = await apiGet({ action: "listusers" });
         const list = Array.isArray(res?.users) ? res.users : [];
 
         if (cancelled) return;
@@ -160,7 +160,7 @@ export default function ReviewReports({ user, onClose }) {
           params.forUserId = viewId;
         }
 
-        const res = await apiGet("reportsummary", params);
+        const res = await apiGet({ action: "reportsummary", ...params });
         if (!cancelled) setData(res);
       } catch (e) {
         if (!cancelled) setErr(e?.message || "Failed to load reports");
@@ -190,6 +190,11 @@ export default function ReviewReports({ user, onClose }) {
 
   const myId = String(user?.UserId ?? user?.userId ?? "").trim();
   const myName = String(user?.name ?? user?.Name ?? "Me").trim();
+
+  const totalUsersCount =
+    user?.role === "admin"
+      ? 1 + reportUsers.filter((u) => String(u.userId) !== String(myId)).length
+      : 0;
 
   return (
     <div
@@ -237,7 +242,8 @@ export default function ReviewReports({ user, onClose }) {
               {user?.role === "admin" && (
                 <div className="mt-2">
                   <label className="block text-xs text-slate-600 dark:text-slate-300 mb-1">
-                    Viewing report for
+                    Viewing report for{" "}
+                    <span className="opacity-70">({totalUsersCount} users)</span>
                   </label>
 
                   <select
