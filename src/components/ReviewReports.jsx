@@ -30,23 +30,21 @@ function balanceColorClass(n) {
     : "text-emerald-700 dark:text-emerald-300";
 }
 
-function StatusPill({ status }) {
+function StatusPill({ status, balance }) {
   const s = String(status || "").toLowerCase();
+  const b = Number(balance || 0);
 
   const isCanceled = s === "canceled";
-  const isReserved = s === "reserved";
+  const isUnpaid = !isCanceled && b > 0.0001;
+  const isPaid = !isCanceled && !isUnpaid; // balance <= 0 (paid or credit)
 
   const cls = isCanceled
-    ? "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200 border-rose-200 dark:border-rose-900"
-    : isReserved
-      ? "bg-emerald-600 text-white border-emerald-700 dark:bg-emerald-500 dark:border-emerald-400"
-      : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700";
+    ? "bg-transparent text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700"
+    : isUnpaid
+      ? "bg-rose-600 text-white border-rose-700 dark:bg-rose-500 dark:border-rose-400"
+      : "bg-emerald-600 text-white border-emerald-700 dark:bg-emerald-500 dark:border-emerald-400";
 
-  const label = isCanceled
-    ? "Canceled"
-    : isReserved
-      ? "Reserved"
-      : s || "Reserved";
+  const label = isCanceled ? "Canceled" : isUnpaid ? "Unpaid" : "Paid";
 
   return (
     <span
@@ -238,13 +236,21 @@ export default function ReviewReports({ user, onClose }) {
 
   const balanceClass = balanceColorClass(totals.balance);
 
-  const totalUsersCount =
-    isAdmin
-      ? 1 + reportUsers.filter((u) => String(u.userId) !== String(myId)).length
-      : 0;
+  const balanceTitle =
+    totals.balance > 0
+      ? "Balance (Owed)"
+      : totals.balance < 0
+        ? "Balance (Credit)"
+        : "Balance";
+
+  const totalUsersCount = isAdmin
+    ? 1 + reportUsers.filter((u) => String(u.userId) !== String(myId)).length
+    : 0;
 
   const filteredUsers = useMemo(() => {
-    const q = String(userQuery || "").trim().toLowerCase();
+    const q = String(userQuery || "")
+      .trim()
+      .toLowerCase();
     const others = reportUsers.filter((u) => String(u.userId) !== String(myId));
 
     if (!q) return others;
@@ -293,7 +299,10 @@ export default function ReviewReports({ user, onClose }) {
 
   const selectedUserName = (() => {
     if (!isAdmin) return "";
-    if (effectiveSelectedUserId && String(effectiveSelectedUserId) === String(myId))
+    if (
+      effectiveSelectedUserId &&
+      String(effectiveSelectedUserId) === String(myId)
+    )
       return myName;
 
     const hit = reportUsers.find(
@@ -346,7 +355,8 @@ export default function ReviewReports({ user, onClose }) {
                                bg-amber-100 text-amber-800 border-amber-200
                                dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30"
                   >
-                    Admin view · {selectedUserName} · #{effectiveSelectedUserId || "?"}
+                    Admin view · {selectedUserName} · #
+                    {effectiveSelectedUserId || "?"}
                   </span>
                 )}
               </div>
@@ -385,7 +395,9 @@ export default function ReviewReports({ user, onClose }) {
                 <div className="w-full" ref={userPickerRef}>
                   <label className="block text-xs text-slate-600 dark:text-slate-300 mb-1">
                     Viewing report for{" "}
-                    <span className="opacity-70">({totalUsersCount} users)</span>
+                    <span className="opacity-70">
+                      ({totalUsersCount} users)
+                    </span>
                   </label>
 
                   <div className="relative">
@@ -399,7 +411,10 @@ export default function ReviewReports({ user, onClose }) {
                       }}
                       onFocus={() => setUserPickerOpen(true)}
                       onKeyDown={(e) => {
-                        if (!userPickerOpen && (e.key === "ArrowDown" || e.key === "Enter")) {
+                        if (
+                          !userPickerOpen &&
+                          (e.key === "ArrowDown" || e.key === "Enter")
+                        ) {
                           setUserPickerOpen(true);
                           return;
                         }
@@ -413,7 +428,10 @@ export default function ReviewReports({ user, onClose }) {
                           e.preventDefault();
                           setUserPickerOpen(true);
                           setActiveUserIndex((i) =>
-                            Math.min(i + 1, Math.max(0, pickerItems.length - 1)),
+                            Math.min(
+                              i + 1,
+                              Math.max(0, pickerItems.length - 1),
+                            ),
                           );
                           return;
                         }
@@ -426,7 +444,8 @@ export default function ReviewReports({ user, onClose }) {
 
                         if (e.key === "Enter") {
                           e.preventDefault();
-                          const pick = pickerItems[activeUserIndex] || pickerItems[0];
+                          const pick =
+                            pickerItems[activeUserIndex] || pickerItems[0];
                           if (pick?.userId) pickUser(pick.userId);
                           return;
                         }
@@ -451,7 +470,8 @@ export default function ReviewReports({ user, onClose }) {
                             pickerItems.map((u, idx) => {
                               const active = idx === activeUserIndex;
                               const selected =
-                                String(u.userId) === String(effectiveSelectedUserId);
+                                String(u.userId) ===
+                                String(effectiveSelectedUserId);
 
                               return (
                                 <button
@@ -467,9 +487,7 @@ export default function ReviewReports({ user, onClose }) {
                                     (selected ? " font-semibold" : "")
                                   }
                                 >
-                                  <span className="truncate">
-                                    {u.name}
-                                  </span>
+                                  <span className="truncate">{u.name}</span>
                                   <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">
                                     #{u.userId}
                                   </span>
@@ -608,13 +626,25 @@ export default function ReviewReports({ user, onClose }) {
             {/* Summary cards */}
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <Card
-                title="Balance"
+                title={balanceTitle}
                 value={money(totals.balance)}
                 valueClassName={balanceClass}
               />
               <Card title="Charges" value={money(totals.charges)} />
               <Card title="Paid" value={money(totals.paid)} />
               <Card title="Plays" value={String(totals.plays)} />
+            </div>
+
+            {/* Balance Explanation */}
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              <span className="font-medium text-rose-700 dark:text-rose-300">
+                Red
+              </span>{" "}
+              means money owed ·{" "}
+              <span className="font-medium text-emerald-700 dark:text-emerald-300">
+                Green
+              </span>{" "}
+              means credit
             </div>
 
             {/* Details */}
@@ -632,7 +662,7 @@ export default function ReviewReports({ user, onClose }) {
                       <th className="p-2">Players (+N)</th>
                       <th className="p-2">Charges</th>
                       <th className="p-2">Paid</th>
-                      <th className="p-2">Outstanding</th>
+                      <th className="p-2">Owe</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -653,7 +683,7 @@ export default function ReviewReports({ user, onClose }) {
                         >
                           <td className="p-2 whitespace-nowrap">{r.date}</td>
                           <td className="p-2 whitespace-nowrap">
-                            <StatusPill status={r.status} />
+                            <StatusPill status={r.status} balance={r.balance} />
                           </td>
 
                           <td className="p-2">
