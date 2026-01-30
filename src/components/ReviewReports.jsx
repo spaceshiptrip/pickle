@@ -236,6 +236,13 @@ export default function ReviewReports({ user, onClose }) {
 
   const balanceClass = balanceColorClass(totals.balance);
 
+  const balanceTitle =
+    totals.balance > 0
+      ? "Balance (Owed)"
+      : totals.balance < 0
+        ? "Balance (Credit)"
+        : "Balance";
+
   const totalUsersCount = isAdmin
     ? 1 + reportUsers.filter((u) => String(u.userId) !== String(myId)).length
     : 0;
@@ -619,13 +626,25 @@ export default function ReviewReports({ user, onClose }) {
             {/* Summary cards */}
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <Card
-                title="Balance (Owe)"
+                title={balanceTitle}
                 value={money(totals.balance)}
                 valueClassName={balanceClass}
               />
               <Card title="Charges" value={money(totals.charges)} />
               <Card title="Paid" value={money(totals.paid)} />
               <Card title="Plays" value={String(totals.plays)} />
+            </div>
+
+            {/* Balance Explanation */}
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              <span className="font-medium text-rose-700 dark:text-rose-300">
+                Red
+              </span>{" "}
+              means money owed ·{" "}
+              <span className="font-medium text-emerald-700 dark:text-emerald-300">
+                Green
+              </span>{" "}
+              means credit
             </div>
 
             {/* Details */}
