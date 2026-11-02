@@ -50,7 +50,7 @@ function name (`migrateUsersToLoginHash` vs `migrateUsersToLoginHash_`).
 
 ## Plan
 
-Steps are in suggested order. Step 5 (check-in) improves the data that steps
+Steps are in suggested order (1b was added later and sits with step 1). Step 5 (check-in) improves the data that steps
 2–4 depend on, so it may be worth doing earlier.
 
 ### 1. Bot → schedule
@@ -64,6 +64,75 @@ Design and decisions: ath-bot `SHEETS_SYNC.md`; open questions:
   reservation 76).
 - Bot calls it after a confirmed booking; a sheet failure never affects the
   booking.
+
+### 1b. Booking bot: scheduling, no browser, and the iPhone
+
+Goal: book reliably at midnight without a laptop babysitting it, and control
+or run it from the iPhone. Added November 1, 2026.
+
+**Why the current bot can't run on the iPhone.** athbot drives desktop
+Chromium through Playwright, which doesn't run on iOS. iOS also suspends
+background apps and won't run one at an exact time, and the booking is a race
+at 12:00–12:01 AM.
+
+**Option A: browserless bot (preferred).** The pages the bot saved
+(`ath-bot/logs/ui_*_initial.html`) show the booking dialog is a classic
+ASP.NET WebForms form: view state kept on the server (`__CEVIEWSTATE`), a
+duration combo box stored in a hidden `..._drpDuration_tCombo_ClientState`
+field, and booking done by posting the form with
+`__EVENTTARGET=ctl00$ctrl_MakeBookingTime$lbBook`. No CAPTCHA or bot-detection
+script appears on those pages. The bot already submits exactly this form, just
+from inside a browser.
+
+- Flow: log in (keep the session cookie) → GET the dialog URL for each court
+  and time → read every hidden input → set the duration ClientState to 120 →
+  POST → check the response for the confirmation text.
+- Python `requests` (or `httpx` for North and South in parallel); roughly 100
+  lines, no Chromium.
+- Attempts take milliseconds instead of seconds, and it runs anywhere: the
+  Mac, a Raspberry Pi, a small server, possibly Apps Script.
+- **Unknown: login.** The bot calls the site's `doLogin('p=MembersDefault', 8,
+  '0')`. Capture the network requests of one normal login to see what it
+  sends. If login needs real JavaScript, use a hybrid: browser once to log
+  in, save cookies, then book over HTTP.
+- Keep the countdown logic: poll the court page until booking opens, then
+  fire. Keep logging the response HTML for verification.
+
+**Option B: Safari extension on the iPhone (manual/backup).** A content
+script on athenaeumcaltech.com pages (via the free Userscripts app, or a small
+Safari Web Extension) runs in the user's own signed-in Safari, so no password
+is stored anywhere.
+
+- Around 11:55 PM, open the court page signed in; the script watches the
+  countdown, fires the North and South booking posts (same form post as
+  Option A), then posts the result to the sheet (step 1's action).
+- Constraint: the page must stay open on screen. Auto-Lock off and phone
+  plugged in; iOS throttles or pauses background tabs. Good for attended runs,
+  not for overnight unattended ones.
+- Shares the "read hidden fields, post, check confirmation" logic with
+  Option A.
+
+**Scheduling unattended runs.**
+
+- macOS: a `launchd` job (more reliable than cron on a Mac) plus
+  `pmset schedule wake` a few minutes before midnight so a sleeping Mac runs it.
+- Linux (Pi or server): cron or a systemd timer. (`init.d` starts services at
+  boot; it isn't a scheduler.)
+- The repo's Dockerfile needs fixing first (it copies a nonexistent `src/`).
+- Cloud servers: the Athenaeum site may block cloud IP addresses; test first.
+
+**iPhone as the control panel.**
+
+- Push notifications from the bot on booked / failed / sheet updated, via
+  ntfy or Pushover.
+- An admin "Bot" page in this app, added to the home screen: next scheduled
+  run, last results, buttons such as "skip this week" or "change time". The
+  settings live in the sheet and the bot reads them before each run.
+- Lighter alternative: an iOS Shortcut that calls the bot host.
+
+**Open questions.** Which machine runs the unattended bot? Is the Athenaeum OK
+with automated booking at this speed? Should the iPhone extension be built, or
+is Option A on a schedule enough?
 
 ### 2. Venmo → PAID, automatically
 
