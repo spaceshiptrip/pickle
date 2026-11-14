@@ -90,6 +90,8 @@ function doPost(e) {
   var payload = parseBody_(e);
   var action = getAction_(e, payload);
 
+  if (action === "botaddreservation") return json_(botAddReservation_(payload));
+
   // Existing POST actions
   if (action === "signup") {
     var ctxSignup = requireAuth_(e, payload);
@@ -476,6 +478,69 @@ function nextReservationId_() {
   }
   return String(maxId + 1);
 }
+
+function botAddReservation_(p) {
+  var secret = PropertiesService.getScriptProperties().getProperty("BOT_SHARED_SECRET");
+  if (!secret || p.secret !== secret) return { ok: false, error: "forbidden" };
+  if (typeof p.Date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(p.Date) ||
+      typeof p.Start !== "string" || !/^\d{2}:\d{2}$/.test(p.Start) ||
+      typeof p.End !== "string" || !/^\d{2}:\d{2}$/.test(p.End) ||
+      ["North", "South", "Both"].indexOf(p.Court) < 0)
+    return { ok: false, error: "bad_request" };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var sheet = getSheet_(RESERVATIONS_SHEET_NAME);
+    var table = readTable_(sheet);
+    var idx = headerIndexMap_(table.header);
+    var latest = null;
+    var highestId = -Infinity;
+    for (var i = 0; i < table.rows.length; i++) {
+      var row = table.rows[i];
+      var court = String(row[idx.Court] || "").trim().toLowerCase();
+      var status = String(row[idx.Status] || "").trim().toLowerCase();
+      if (status === "canceled") continue;
+      var start = row[idx.Start];
+      start = start instanceof Date
+        ? Utilities.formatDate(start, Session.getScriptTimeZone(), "HH:mm")
+        : String(start).trim().replace(/^(\d):/, "0$1:");
+      if (formatYmdFromAny_(row[idx.Date]) === p.Date && start === p.Start &&
+          court === p.Court.toLowerCase())
+        return { ok: true, duplicate: true, id: row[idx.Id] };
+      var idText = String(row[idx.Id]).trim();
+      var id = Number(idText);
+      if (court === "both" && idText !== "" && isFinite(id) && id > highestId) {
+        highestId = id;
+        latest = row;
+      }
+    }
+    var both = p.Court === "Both";
+    var newId = nextReservationId_();
+    upsertRowById_(sheet, "Id", {
+      Id: newId, Date: p.Date, Start: p.Start, End: p.End, Court: p.Court,
+      Capacity: both ? 14 : 8, BaseFee: 10, Status: "reserved",
+      Visibility: both ? normalizeVisibility_(latest ? latest[idx.Visibility] : "member") : "memberplus",
+      VisibleToUserIds: both && latest ? latest[idx.VisibleToUserIds] : "",
+      VisibleToGroups: both && latest ? latest[idx.VisibleToGroups] : ""
+    });
+    return { ok: true, duplicate: false, id: newId };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function setBotSecret_() {
+  var properties = PropertiesService.getScriptProperties();
+  if (properties.getProperty("BOT_SHARED_SECRET")) {
+    Logger.log("already set");
+    return;
+  }
+  var secret = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, "");
+  properties.setProperty("BOT_SHARED_SECRET", secret);
+  Logger.log(secret);
+}
+
 
 /** -------- API impl (existing) -------- */
 function isAllowlistedForAny_(ctx, items) {
