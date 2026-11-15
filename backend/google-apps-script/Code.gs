@@ -530,7 +530,7 @@ function botAddReservation_(p) {
   }
 }
 
-function setBotSecret_() {
+function setBotSecret() {
   var properties = PropertiesService.getScriptProperties();
   if (properties.getProperty("BOT_SHARED_SECRET")) {
     Logger.log("already set");
@@ -2422,7 +2422,7 @@ function hashLoginId_(input) {
   return sha256Hex_(c.kind + ":" + c.normalized);
 }
 
-function migrateUsersToLoginHash_() {
+function migrateUsersToLoginHash() {
   var sh = sheetByName(USERS_SHEET_NAME);
   var t = readTable_(sh);
   var idx = headerIndexMap_(t.header);
