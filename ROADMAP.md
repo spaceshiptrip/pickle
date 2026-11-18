@@ -48,6 +48,31 @@ function name (`migrateUsersToLoginHash` vs `migrateUsersToLoginHash_`).
 - **Partial payments** can't be recorded as "partial" by `markPaid_`, which
   sets PAID to the full charge or 0.
 
+## Next up (priority set November 18, 2026)
+
+Work these in order, starting the week of November 19. Each one is a command
+Jay gives Claude ("hook"), which Claude carries out end to end.
+
+1. **Cancel a court or both.** Jay says which session and which courts.
+   Claude cancels on the Athenaeum site using the ath-bot account, updates the
+   pickle app (reservation set to `canceled`, or `Court` changed to the
+   remaining court), and sends Jay confirmation from both: the Athenaeum
+   cancellation result and the updated sheet row. Needs: the Athenaeum
+   cancellation flow (not yet built or observed; see "Requirements before
+   adding live reservation tests" in ath-bot `TODO.md`), and an
+   update/cancel action on the backend.
+2. **Ad hoc reservations.** Jay gives a date, time and courts. ath-bot books
+   them on demand (not only on the Wednesday/Sunday schedule), then Claude
+   adds the session to the app calendar via `botaddreservation` and confirms.
+   Builds on step 1 of the plan below.
+3. **Add a new user.** Jay gives name, role, phone/email and group; Claude
+   adds the Users row (next UserId, login hash, Active=1) and confirms. Needs a
+   backend action or a careful sheet write that matches `approveGuest_` and
+   `migrateUsersToLoginHash`.
+
+All three touch live systems: Claude confirms the exact action with Jay before
+submitting, and reports what changed on each site.
+
 ## Plan
 
 Steps are in suggested order (1b was added later and sits with step 1). Step 5 (check-in) improves the data that steps
