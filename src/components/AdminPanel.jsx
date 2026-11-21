@@ -57,6 +57,11 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState("");
 
+  const [venmoReviews, setVenmoReviews] = useState([]);
+  const [venmoSelections, setVenmoSelections] = useState({});
+  const [venmoResult, setVenmoResult] = useState("");
+  const [venmoBusy, setVenmoBusy] = useState(false);
+
   // Approvals
   const [approvals, setApprovals] = useState([]);
   const [approvalsLoading, setApprovalsLoading] = useState(false);
@@ -243,7 +248,7 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
     try {
       const r = await apiGet({ action: "listreservations" });
       if (mounted && r.ok) setReservations(r.reservations);
-      if (isAdmin) await loadUsersIndex();
+      if (isAdmin) { await loadUsersIndex(); await loadVenmoReviews(); }
 
       await loadApprovals();
     } catch (e) {
@@ -279,6 +284,27 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
   useEffect(() => {
     window.__usersById = usersById;
   }, [usersById]);
+
+  async function loadVenmoReviews() {
+    try {
+      const r = await apiGet({ action: "listvenmoreview" });
+      if (r.ok) setVenmoReviews(r.reviews || []);
+      else setVenmoResult(r.error || "Could not load Venmo reviews");
+    } catch (e) { setVenmoResult(e.message); }
+  }
+
+  async function resolveVenmo(row, dismiss) {
+    const userId = venmoSelections[row.MessageId];
+    const player = usersById[userId];
+    if (!dismiss && (!player || !confirm(`Mark ${pickUserName(player)} paid from ${row.Payer} $${Number(row.Amount).toFixed(2)}?`))) return;
+    setVenmoBusy(true);
+    try {
+      const r = await apiPost("resolvevenmo", dismiss ? { messageId: row.MessageId, dismiss: true } : { messageId: row.MessageId, userId });
+      setVenmoResult(r.ok ? `${row.Payer}: ${r.result} (${r.rowsMarked} rows marked)` : `Error: ${r.error}`);
+      await loadVenmoReviews();
+    } catch (e) { setVenmoResult(`Error: ${e.message}`); }
+    finally { setVenmoBusy(false); }
+  }
 
   async function loadApprovals() {
     setApprovalsLoading(true);
@@ -1372,6 +1398,32 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {isAdmin && (venmoReviews.length > 0 || venmoResult) && (
+        <div className="border-t border-slate-200 dark:border-slate-700 pt-4 mt-6">
+          {venmoReviews.length > 0 && <>
+            <h3 className="font-semibold text-lg text-slate-900 dark:text-slate-100">Venmo to review <span className="rounded-full bg-indigo-100 text-indigo-800 px-2 py-1 text-xs">{venmoReviews.length}</span></h3>
+            <div className="space-y-3 mt-3">
+              {venmoReviews.map((row) => (
+                <div key={row.MessageId} className="bg-white p-4 rounded shadow-sm border border-slate-200 dark:bg-slate-800 dark:border-slate-700">
+                  <div className="font-medium text-slate-900 dark:text-slate-100">{row.Payer} · ${Number(row.Amount).toFixed(2)}</div>
+                  <div className="text-sm text-slate-500 dark:text-slate-400">{new Date(row.Received).toLocaleDateString()}</div>
+                  <div className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{row.Note}</div>
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <select aria-label={`Player for ${row.Payer}`} value={venmoSelections[row.MessageId] || ""} onChange={(e) => setVenmoSelections({ ...venmoSelections, [row.MessageId]: e.target.value })} className="border rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600">
+                      <option value="">Select player</option>
+                      {Object.entries(usersById).map(([id, user]) => <option key={id} value={id}>{pickUserName(user) || id}</option>)}
+                    </select>
+                    <button disabled={venmoBusy || !venmoSelections[row.MessageId]} onClick={() => resolveVenmo(row, false)} className="bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm font-bold disabled:opacity-50">Assign</button>
+                    <button disabled={venmoBusy} onClick={() => resolveVenmo(row, true)} className={smallButtonClass}>Not pickleball</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>}
+          {venmoResult && <div role="status" className="mt-2 text-sm text-slate-700 dark:text-slate-300">{venmoResult}</div>}
         </div>
       )}
 

@@ -8,6 +8,8 @@ const dates = (note, received = new Date(2026, 10, 20)) => Array.from(context.se
 const users = [['1', 'Pat Example, Sam Example', '@pat-ex'], ['2', '', '@solo-ex']];
 const uidx = { UserId: 0, VenmoName: 1, Venmo: 2 };
 const tests = [
+  ['add names with trimming and case-insensitive deduplication', () => { assert.equal(context.addVenmoName_(" Pat Example , Sam Example ", " sam example "), "Pat Example, Sam Example"); assert.equal(context.addVenmoName_("Pat Example", " Alex Example "), "Pat Example, Alex Example"); assert.equal(context.addVenmoName_("", " Alex Example "), "Alex Example"); }],
+  ['live review rows newest first', () => { const rows = [["id", "received", "payer", "amount", "note", "result", "rows", "mode"], ["a", new Date("2026-11-19T00:00:00Z"), "Pat Example", 5, "game", "review", 0, "live"], ["b", new Date("2026-11-20T00:00:00Z"), "Sam Example", 10, "games", "review", 0, "live"], ["c", new Date(), "Alex Example", 5, "", "review", 0, "dry"], ["d", new Date(), "Alex Example", 5, "", "done", 1, "live"]]; const result = JSON.parse(JSON.stringify(context.reviewRows_(rows))); assert.deepEqual(result.map(r => r.MessageId), ["b", "a"]); assert.equal(result[0].Received, "2026-11-20T00:00:00.000Z"); assert.deepEqual(Object.keys(result[0]), ["MessageId", "Received", "Payer", "Amount", "Note"]); }],
   ['VenmoName list and handle match', () => { assert.equal(context.venmoUser_('Sam Example', users, uidx), '1'); assert.equal(context.venmoUser_('@solo-ex', users, uidx), '2'); assert.equal(context.venmoUser_('Pat', users, uidx), null); }],
 
   ['app note formats', () => { assert.deepEqual(dates('Pickleball 2026-11-19 18:30'), ['2026-11-19']); assert.deepEqual(dates('Pickleball+2026-11-19+18:30'), ['2026-11-19']); }],

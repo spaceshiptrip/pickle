@@ -64,6 +64,67 @@ function venmoPlan_(payer, amount, dates, users, userIdx, attendance, attIdx, st
   return { result: marked.length && remaining === 0 ? 'done' : 'review', rows: marked };
 }
 
+function addVenmoName_(existing, name) {
+  var names = String(existing || '').split(',').map(function (v) { return v.trim(); }).filter(Boolean);
+  name = String(name || '').trim();
+  if (name && !names.some(function (v) { return v.toLowerCase() === name.toLowerCase(); })) names.push(name);
+  return names.join(', ');
+}
+
+function reviewRows_(values) {
+  return values.slice(1).filter(function (r) { return r[5] === 'review' && r[7] === 'live'; }).map(function (r) {
+    return { MessageId: String(r[0]), Received: new Date(r[1]).toISOString(), Payer: r[2], Amount: r[3], Note: r[4] };
+  }).sort(function (a, b) { return b.Received.localeCompare(a.Received); });
+}
+
+function listVenmoReview_() {
+  var log = SpreadsheetApp.getActive().getSheetByName('VenmoLog');
+  return log ? reviewRows_(log.getDataRange().getValues()) : [];
+}
+
+function resolveVenmo_(payload) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var log = SpreadsheetApp.getActive().getSheetByName('VenmoLog');
+    var values = log ? log.getDataRange().getValues() : [], rowIndex = -1;
+    for (var i = 1; i < values.length; i++) {
+      if (String(values[i][0]) === String(payload.messageId || '') && values[i][5] === 'review' && values[i][7] === 'live') { rowIndex = i; break; }
+    }
+    if (rowIndex < 0) return { ok: false, error: 'not_found' };
+    var row = values[rowIndex], result, rowsMarked = Number(row[6]) || 0;
+    if (payload.dismiss === true) {
+      result = 'dismissed';
+      log.getRange(rowIndex + 1, 6).setValue(result);
+    } else {
+      if (!payload.userId) return { ok: false, error: 'bad_request' };
+      var userSheet = sheetByName('Users'), users = userSheet.getDataRange().getValues(), userIdx = headerIndexMap_(users.shift());
+      if (userIdx.UserId === undefined || userIdx.VenmoName === undefined || userIdx.Venmo === undefined) throw new Error('Users missing Venmo columns');
+      var userIndex = users.findIndex(function (u) { return String(u[userIdx.UserId]).trim() === String(payload.userId).trim(); });
+      if (userIndex < 0) return { ok: false, error: 'user_not_found' };
+      users[userIndex][userIdx.VenmoName] = addVenmoName_(users[userIndex][userIdx.VenmoName], row[2]);
+      userSheet.getRange(userIndex + 2, userIdx.VenmoName + 1).setValue(users[userIndex][userIdx.VenmoName]);
+      var sheet = sheetByName('Attendance'), att = sheet.getDataRange().getValues(), idx = headerIndexMap_(att.shift());
+      idx.present = idx['Present (1/0)'] !== undefined ? idx['Present (1/0)'] : idx.Present;
+      idx.charge = idx['Charge (auto)'] !== undefined ? idx['Charge (auto)'] : idx.Charge;
+      ['Date', 'UserId', 'present', 'charge', 'PAID', 'ReservationId'].forEach(function (key) { if (idx[key] === undefined) throw new Error('Attendance missing ' + key); });
+      var reservations = sheetByName('Reservations').getDataRange().getValues(), ri = headerIndexMap_(reservations.shift()), statuses = {};
+      if (ri.Id === undefined || ri.Status === undefined) throw new Error('Reservations missing Id or Status');
+      reservations.forEach(function (r) { statuses[String(r[ri.Id])] = String(r[ri.Status] || '').trim().toLowerCase(); });
+      var plan = venmoPlan_(row[2], Number(row[3]), sessionDatesFromNote_(row[4], new Date(row[1])), users, userIdx, att, idx, statuses);
+      plan.rows.forEach(function (entry) { sheet.getRange(entry.row, idx.PAID + 1).setValue(entry.charge); });
+      result = plan.result; rowsMarked = plan.rows.length;
+      log.getRange(rowIndex + 1, 6, 1, 2).setValues([[result, rowsMarked]]);
+    }
+    var thread = GmailApp.getMessageById(String(row[0])).getThread();
+    var oldLabel = GmailApp.getUserLabelByName('venmo-review');
+    if (oldLabel) thread.removeLabel(oldLabel);
+    var labelName = 'venmo-' + (result === 'dismissed' ? 'skipped' : result);
+    thread.addLabel(GmailApp.getUserLabelByName(labelName) || GmailApp.createLabel(labelName));
+    return { ok: true, result: result, rowsMarked: rowsMarked };
+  } finally { lock.releaseLock(); }
+}
+
 function venmoSync() {
   var lock = LockService.getScriptLock();
   try { lock.waitLock(30000); } catch (e) { return; }
@@ -89,7 +150,7 @@ function venmoSync() {
     var messages = [];
     threads.forEach(function (thread) { thread.getMessages().forEach(function (message) { messages.push({ thread: thread, message: message }); }); });
     messages.sort(function (a, b) { return a.message.getDate().getTime() - b.message.getDate().getTime(); });
-    var threadResults = [];
+    var threadResults = [], newReviews = [];
     messages.forEach(function (item) {
       var message = item.message, id = message.getId();
       if (!/(?:^|[<\s])venmo@venmo\.com(?:>|$)/i.test(message.getFrom().trim()) || seen[id]) return;
@@ -98,6 +159,7 @@ function venmoSync() {
       if (live) plan.rows.forEach(function (entry) { sheet.getRange(entry.row, attIdx.PAID + 1).setValue(entry.charge); att[entry.row - 2][attIdx.PAID] = entry.charge; });
       else plan.rows.forEach(function (entry) { att[entry.row - 2][attIdx.PAID] = entry.charge; });
       log.appendRow([id, message.getDate(), parsed ? parsed.payer : '', parsed ? parsed.amount : '', note, plan.result, plan.rows.length, live ? 'live' : 'dry']);
+      if (live && plan.result === 'review') newReviews.push(parsed.payer + ' | $' + parsed.amount.toFixed(2) + ' | ' + note);
       seen[id] = true;
       threadResults.push({ thread: item.thread, result: plan.result });
     });
@@ -106,6 +168,7 @@ function venmoSync() {
       var name = 'venmo-' + entry.result, label = GmailApp.getUserLabelByName(name) || GmailApp.createLabel(name);
       entry.thread.addLabel(label);
     });
+    if (live && newReviews.length) MailApp.sendEmail(Session.getEffectiveUser().getEmail(), 'Pickleball: ' + newReviews.length + ' Venmo payment(s) need review', newReviews.join('\n') + '\n\nhttps://pickle.nadabarkada.com');
   } finally { lock.releaseLock(); }
 }
 

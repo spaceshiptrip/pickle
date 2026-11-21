@@ -53,6 +53,12 @@ function doGet(e) {
     }
   }
 
+  if (action === "listvenmoreview") {
+    var ctxVenmo = requireAuth_(e, null);
+    requireRole_(ctxVenmo, ["admin"]);
+    return json_({ ok: true, reviews: listVenmoReview_() });
+  }
+
   if (action === "listapprovals") {
     var ctx4 = requireAuth_(e, null);
     requireRole_(ctx4, ["admin"]);
@@ -133,6 +139,12 @@ function doPost(e) {
     var ctx3 = requireAuth_(e, payload);
     requireRole_(ctx3, ["admin"]);
     return json_(addFee_(payload));
+  }
+
+  if (action === "resolvevenmo") {
+    var ctxVenmo = requireAuth_(e, payload);
+    requireRole_(ctxVenmo, ["admin"]);
+    return json_(resolveVenmo_(payload));
   }
 
   if (action === "approveguest") {
