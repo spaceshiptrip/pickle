@@ -1,4 +1,4 @@
-/* Venmo notification reconciliation. Dry runs are logged and are not replayed. */
+/* Venmo notification reconciliation. Dry runs log once; a later live run still processes them. */
 function parseVenmoSubject_(s) {
   var match = String(s || '').match(/^(.+?) paid you \$([\d,]+\.\d{2})/);
   return match ? { payer: match[1].trim(), amount: Number(match[2].replace(/,/g, '')) } : null;
@@ -69,7 +69,8 @@ function venmoSync() {
     if (!log) log = ss.insertSheet('VenmoLog');
     if (log.getLastRow() === 0) log.appendRow(['MessageId', 'Received', 'Payer', 'Amount', 'Note', 'Result', 'RowsMarked', 'Mode']);
     var logValues = log.getDataRange().getValues(), seen = {};
-    for (var l = 1; l < logValues.length; l++) seen[String(logValues[l][0])] = true;
+    // Live runs skip only messages already handled live, so dry-run rows never block a real payment.
+    for (var l = 1; l < logValues.length; l++) if (!live || logValues[l][7] === 'live') seen[String(logValues[l][0])] = true;
     var users = sheetByName('Users').getDataRange().getValues(), userIdx = headerIndexMap_(users.shift());
     var sheet = sheetByName('Attendance'), att = sheet.getDataRange().getValues(), attIdx = headerIndexMap_(att.shift());
     attIdx.present = attIdx['Present (1/0)'] !== undefined ? attIdx['Present (1/0)'] : attIdx.Present;
