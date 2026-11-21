@@ -16,3 +16,4 @@ spreadsheet/*.xlsx
 !spreadsheet/template.xlsx
 
 node_modules/
+handoff/
