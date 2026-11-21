@@ -167,7 +167,8 @@ function resolveVenmo_(payload) {
           sheet.appendRow(newRow);
         });
         rowsMarked = assignment.marked.length + names.length;
-        result = leftover === 0 && rowsMarked === spots ? 'done' : 'review';
+        // Leftover money (tips, drinks) never keeps the payment in review: re-resolving it would add the players twice.
+        result = spots > 0 && rowsMarked === spots ? 'done' : 'review';
       } else {
         var plan = venmoPlan_(row[2], Number(row[3]), sessionDatesFromNote_(row[4], new Date(row[1])), users, userIdx, att, idx, statuses);
         plan.rows.forEach(function (entry) { sheet.getRange(entry.row, idx.PAID + 1).setValue(entry.charge); });
