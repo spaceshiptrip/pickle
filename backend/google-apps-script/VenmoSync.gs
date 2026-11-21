@@ -37,8 +37,12 @@ function sessionDatesFromNote_(note, receivedDate) {
 
 function venmoUser_(payer, users, idx) {
   function normalize(value) { return String(value || '').trim().replace(/^@/, '').trim().toLowerCase(); }
+  // Users.VenmoName holds the display name(s) Venmo puts in the subject, comma-separated
+  // (e.g. a spouse who pays for the account); Users.Venmo (@handle) is also accepted.
   var target = normalize(payer), matches = users.filter(function (row) {
-    return target && normalize(row[idx.Venmo]) === target && String(row[idx.UserId] || '').trim();
+    var names = String(idx.VenmoName !== undefined ? row[idx.VenmoName] || '' : '').split(',').map(normalize);
+    names.push(normalize(row[idx.Venmo]));
+    return target && names.indexOf(target) !== -1 && String(row[idx.UserId] || '').trim();
   });
   return matches.length === 1 ? String(matches[0][idx.UserId]).trim() : null;
 }

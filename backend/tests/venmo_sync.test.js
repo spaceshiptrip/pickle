@@ -5,7 +5,11 @@ const path = require('node:path');
 const context = vm.createContext({});
 vm.runInContext(fs.readFileSync(path.join(__dirname, '../google-apps-script/VenmoSync.gs'), 'utf8'), context);
 const dates = (note, received = new Date(2026, 10, 20)) => Array.from(context.sessionDatesFromNote_(note, received));
+const users = [['1', 'Pat Example, Sam Example', '@pat-ex'], ['2', '', '@solo-ex']];
+const uidx = { UserId: 0, VenmoName: 1, Venmo: 2 };
 const tests = [
+  ['VenmoName list and handle match', () => { assert.equal(context.venmoUser_('Sam Example', users, uidx), '1'); assert.equal(context.venmoUser_('@solo-ex', users, uidx), '2'); assert.equal(context.venmoUser_('Pat', users, uidx), null); }],
+
   ['app note formats', () => { assert.deepEqual(dates('Pickleball 2026-11-19 18:30'), ['2026-11-19']); assert.deepEqual(dates('Pickleball+2026-11-19+18:30'), ['2026-11-19']); }],
   ['M/D and previous year', () => assert.deepEqual(dates('games 12/31', new Date(2026, 0, 2)), ['2025-12-31'])],
   ['two dates', () => assert.deepEqual(dates('games 9/16 and 10-14'), ['2026-09-16', '2026-10-14'])],
