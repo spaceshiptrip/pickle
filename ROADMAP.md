@@ -48,6 +48,41 @@ function name (`migrateUsersToLoginHash` vs `migrateUsersToLoginHash_`).
 - **Partial payments** can't be recorded as "partial" by `markPaid_`, which
   sets PAID to the full charge or 0.
 
+## TODO (November 20, 2026)
+
+Done Nov 20: Venmo -> PAID live (Apps Script timer every 10 min, VenmoLog,
+Users.VenmoName), admin "Venmo to review" screen + review email (web app v34),
+history catch-up (paid-but-not-RSVPed rows Dec-Nov, 9 missing sessions added),
+"Paid updates within ~10 min" notice, pickleball-ops MCP (status, codex_apply,
+codex_task) in ath-bot/ops/mcp.
+
+1. [ ] Sat 11/21 23:55 bot run for Sun 11/29: check result Sunday via
+   pickleball-ops status. No bot changes before it.
+2. [ ] Sat 11/21 4 PM walkthrough (Jay signs in to the Athenaeum site in the
+   browser pane; observe only, never submit): cancel page, My Reservations,
+   events calendar.
+3. [ ] pickleball-ops tools (Codex job after the walkthrough), each audited:
+   - cancel(date, court|both) and book(date, time, courts): Jay's yes in chat
+     before each; Athenaeum result + sheet update (Both -> remaining court,
+     capacity 14 -> 8; both canceled -> Status canceled; book merges into Both).
+   - my_reservations() and club_events(from, to): read-only.
+   - Bot credentials stay in ath-bot .env on the Mac; never in chat.
+4. [ ] UI/UX look-through (same sitting as 2): Jay signs in to the app in the
+   browser pane; Claude reviews every screen at phone size and ranks issues;
+   Jay picks top 3-5 -> small Codex jobs. Reuse the existing Fable design
+   tokens from training_sheet/docs/design/fable_2026-11-16 ($0). Fold in:
+   "Pay my balance" button, All time / This year report presets, upcoming
+   sessions in the personal report.
+5. [ ] Mac mini prep before Nov 29 (after the Sat run):
+   - launchd install script with repo-relative paths (one command on the new Mac).
+   - Bot success check: drop the bare "confirmed" marker (false-win risk).
+   - Move order: bot + pickleball-ops together; run on one machine only.
+6. [ ] Venmo follow-ups: watch the first real live payment in VenmoLog;
+   one payment covering two sessions can only be assigned to one (split by
+   hand for now); times for 4/16 and 4/18 sessions (blank = hidden on calendar).
+7. [ ] Later: QR check-in at the courts, monthly statement email, iMessage
+   group text for bot results.
+
 ## Next up (priority set November 18, 2026)
 
 Work these in order, starting the week of November 19. Each one is a command
