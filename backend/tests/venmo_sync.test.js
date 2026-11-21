@@ -23,3 +23,42 @@ const tests = [
 ];
 for (const [name, fn] of tests) { fn(); console.log('ok - ' + name); }
 console.log(`${tests.length} tests passed`);
+const normalize = value => JSON.parse(JSON.stringify(value));
+const unpaid = { row: 2, present: 1, charge: 10, paid: 2 };
+assert.deepEqual(normalize(context.planAssign_(2, [unpaid, { row: 3, present: 1, charge: 10, paid: 10 }])), { marked: [unpaid], add: 1 });
+assert.deepEqual(normalize(context.planAssign_(1, [])), { marked: [], add: 1 });
+assert.deepEqual(normalize(context.planAssign_(0, [unpaid])), { marked: [], add: 0 });
+const amount = 25, fee = 10, spots = Math.floor(amount / fee);
+assert.deepEqual(normalize(context.planAssign_(spots, [])), { marked: [], add: 2 });
+assert.equal(amount - spots * fee, 5);
+assert.deepEqual(Array.from(context.guestNames_('Pat Example', false, 3)), ['Pat Example', 'Pat Example +1', 'Pat Example +2']);
+assert.deepEqual(Array.from(context.guestNames_('Pat Example', true, 2)), ['Pat Example +1', 'Pat Example +2']);
+console.log('ok - assignment and guest names');
+// Exercise the sheet and log effects without contacting Apps Script services.
+const tables = {
+  VenmoLog: [['MessageId', 'Received', 'Payer', 'Amount', 'Note', 'Result', 'RowsMarked', 'Mode'], ['m1', new Date(2026, 10, 20), 'Sam Example', 25, '11/19', 'review', 0, 'live']],
+  Users: [['UserId', 'Name', 'VenmoName', 'Venmo'], ['u1', 'Pat Example', '', '']],
+  Reservations: [['Id', 'Date', 'Status', 'BaseFee'], ['r1', '2026-11-19', 'reserved', 10], ['r2', '2026-11-19', 'cancelled', 10]],
+  Attendance: [['Date', 'Hours', 'Player Name', 'UserId', 'Present (1/0)', 'Charge (auto)', 'PAID', 'ReservationId'], ['2026-11-19', 2, 'Pat Example', 'u1', 1, 10, 0, 'r1'], ['2026-11-19', 2, 'Alex Example', 'u2', 1, 10, 0, 'r1']]
+};
+const sheets = Object.fromEntries(Object.entries(tables).map(([name, rows]) => [name, {
+  getDataRange: () => ({ getValues: () => rows.map(r => r.slice()) }),
+  getRange: (row, col) => ({ setValue: value => { rows[row - 1][col - 1] = value; }, setValues: values => values.forEach((r, i) => r.forEach((v, j) => { rows[row - 1 + i][col - 1 + j] = v; })) }),
+  appendRow: row => rows.push(Array.from(row))
+}]));
+context.headerIndexMap_ = headers => Object.fromEntries(Array.from(headers, (h, i) => [h, i]));
+context.sheetByName = name => sheets[name];
+context.SpreadsheetApp = { getActive: () => ({ getSheetByName: name => sheets[name] }) };
+context.LockService = { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) };
+context.GmailApp = { getMessageById: () => ({ getThread: () => ({ removeLabel() {}, addLabel() {} }) }), getUserLabelByName: () => ({}), createLabel: () => ({}) };
+context.parseSheetDate_ = () => null;
+context.parseYmd_ = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+assert.deepEqual(Array.from(context.listVenmoReview_()[0].SuggestedReservationIds), ['r1']);
+assert.equal(context.resolveVenmo_({ messageId: 'm1', userId: 'u1', reservationId: 'r2' }).error, 'bad_reservation');
+assert.equal(tables.Users[1][2], '');
+assert.deepEqual(normalize(context.resolveVenmo_({ messageId: 'm1', userId: 'u1', reservationId: 'r1' })), { ok: true, result: 'review', rowsMarked: 2 });
+assert.equal(tables.Attendance[1][6], 10);
+assert.equal(tables.Attendance[2][6], 0);
+assert.deepEqual(tables.Attendance[3], ['2026-11-19', 2, 'Pat Example +1', 'u1', 1, 10, 10, 'r1']);
+assert.equal(tables.VenmoLog[1][6], 2);
+console.log('ok - offline review and assignment integration');

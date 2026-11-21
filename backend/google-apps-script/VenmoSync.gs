@@ -77,9 +77,38 @@ function reviewRows_(values) {
   }).sort(function (a, b) { return b.Received.localeCompare(a.Received); });
 }
 
+function reservationDateKey_(value) {
+  var date = parseSheetDate_(value);
+  if (!date && typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) date = parseYmd_(value.trim());
+  return date ? date.getFullYear() + '-' + ('0' + (date.getMonth() + 1)).slice(-2) + '-' + ('0' + date.getDate()).slice(-2) : '';
+}
+
+function planAssign_(spots, existingRows) {
+  var marked = [];
+  existingRows.forEach(function (row) {
+    var charge = Number(row.charge), paid = Number(row.paid || 0);
+    if (marked.length < spots && Number(row.present) === 1 && isFinite(charge) && charge > 0 && isFinite(paid) && paid < charge) marked.push(row);
+  });
+  return { marked: marked, add: Math.max(0, spots - marked.length) };
+}
+
+function guestNames_(name, hasRow, count) {
+  var names = [];
+  for (var i = 0; i < count; i++) names.push(!hasRow && i === 0 ? name : name + ' +' + (hasRow ? i + 1 : i));
+  return names;
+}
+
 function listVenmoReview_() {
   var log = SpreadsheetApp.getActive().getSheetByName('VenmoLog');
-  return log ? reviewRows_(log.getDataRange().getValues()) : [];
+  if (!log) return [];
+  var reservations = sheetByName('Reservations').getDataRange().getValues(), idx = headerIndexMap_(reservations.shift());
+  return reviewRows_(log.getDataRange().getValues()).map(function (row) {
+    var dates = sessionDatesFromNote_(row.Note, new Date(row.Received));
+    row.SuggestedReservationIds = reservations.filter(function (r) {
+      return String(r[idx.Status] || '').trim().toLowerCase() === 'reserved' && dates.indexOf(reservationDateKey_(r[idx.Date])) !== -1;
+    }).map(function (r) { return String(r[idx.Id]); });
+    return row;
+  });
 }
 
 function resolveVenmo_(payload) {
@@ -102,18 +131,48 @@ function resolveVenmo_(payload) {
       if (userIdx.UserId === undefined || userIdx.VenmoName === undefined || userIdx.Venmo === undefined) throw new Error('Users missing Venmo columns');
       var userIndex = users.findIndex(function (u) { return String(u[userIdx.UserId]).trim() === String(payload.userId).trim(); });
       if (userIndex < 0) return { ok: false, error: 'user_not_found' };
-      users[userIndex][userIdx.VenmoName] = addVenmoName_(users[userIndex][userIdx.VenmoName], row[2]);
-      userSheet.getRange(userIndex + 2, userIdx.VenmoName + 1).setValue(users[userIndex][userIdx.VenmoName]);
-      var sheet = sheetByName('Attendance'), att = sheet.getDataRange().getValues(), idx = headerIndexMap_(att.shift());
+      var sheet = sheetByName('Attendance'), attValues = sheet.getDataRange().getValues(), headers = attValues.shift(), att = attValues, idx = headerIndexMap_(headers);
       idx.present = idx['Present (1/0)'] !== undefined ? idx['Present (1/0)'] : idx.Present;
       idx.charge = idx['Charge (auto)'] !== undefined ? idx['Charge (auto)'] : idx.Charge;
       ['Date', 'UserId', 'present', 'charge', 'PAID', 'ReservationId'].forEach(function (key) { if (idx[key] === undefined) throw new Error('Attendance missing ' + key); });
       var reservations = sheetByName('Reservations').getDataRange().getValues(), ri = headerIndexMap_(reservations.shift()), statuses = {};
       if (ri.Id === undefined || ri.Status === undefined) throw new Error('Reservations missing Id or Status');
       reservations.forEach(function (r) { statuses[String(r[ri.Id])] = String(r[ri.Status] || '').trim().toLowerCase(); });
-      var plan = venmoPlan_(row[2], Number(row[3]), sessionDatesFromNote_(row[4], new Date(row[1])), users, userIdx, att, idx, statuses);
-      plan.rows.forEach(function (entry) { sheet.getRange(entry.row, idx.PAID + 1).setValue(entry.charge); });
-      result = plan.result; rowsMarked = plan.rows.length;
+      var reservation, fee;
+      if (payload.reservationId) {
+        reservation = reservations.find(function (r) { return String(r[ri.Id]) === String(payload.reservationId); });
+        fee = reservation && Number(reservation[ri.BaseFee]);
+        if (!reservation || statuses[String(payload.reservationId)] !== 'reserved' || !isFinite(fee) || fee <= 0) return { ok: false, error: 'bad_reservation' };
+        ['Hours', 'Player Name'].forEach(function (key) { if (idx[key] === undefined) throw new Error('Attendance missing ' + key); });
+        if (userIdx.Name === undefined || ri.Date === undefined) throw new Error('Missing user name or reservation date');
+      }
+      users[userIndex][userIdx.VenmoName] = addVenmoName_(users[userIndex][userIdx.VenmoName], row[2]);
+      userSheet.getRange(userIndex + 2, userIdx.VenmoName + 1).setValue(users[userIndex][userIdx.VenmoName]);
+      if (reservation) {
+        var amountCents = Math.round(Number(row[3]) * 100), feeCents = Math.round(fee * 100);
+        if (!isFinite(amountCents) || amountCents < 0 || feeCents <= 0) return { ok: false, error: 'bad_reservation' };
+        var spots = Math.min(6, Math.floor(amountCents / feeCents)), leftover = amountCents - spots * feeCents;
+        var existing = [];
+        att.forEach(function (r, i) {
+          if (String(r[idx.UserId]).trim() === String(payload.userId).trim() && String(r[idx.ReservationId]) === String(payload.reservationId))
+            existing.push({ row: i + 2, present: r[idx.present], charge: r[idx.charge], paid: r[idx.PAID] });
+        });
+        var assignment = planAssign_(spots, existing);
+        assignment.marked.forEach(function (entry) { sheet.getRange(entry.row, idx.PAID + 1).setValue(Number(entry.charge)); });
+        var names = guestNames_(String(users[userIndex][userIdx.Name] || ''), existing.length > 0, assignment.add);
+        names.forEach(function (name) {
+          var newRow = headers.map(function () { return ''; });
+          newRow[idx.Date] = reservation[ri.Date]; newRow[idx.Hours] = 2; newRow[idx['Player Name']] = name;
+          newRow[idx.UserId] = payload.userId; newRow[idx.present] = 1; newRow[idx.charge] = fee; newRow[idx.PAID] = fee; newRow[idx.ReservationId] = payload.reservationId;
+          sheet.appendRow(newRow);
+        });
+        rowsMarked = assignment.marked.length + names.length;
+        result = leftover === 0 && rowsMarked === spots ? 'done' : 'review';
+      } else {
+        var plan = venmoPlan_(row[2], Number(row[3]), sessionDatesFromNote_(row[4], new Date(row[1])), users, userIdx, att, idx, statuses);
+        plan.rows.forEach(function (entry) { sheet.getRange(entry.row, idx.PAID + 1).setValue(entry.charge); });
+        result = plan.result; rowsMarked = plan.rows.length;
+      }
       log.getRange(rowIndex + 1, 6, 1, 2).setValues([[result, rowsMarked]]);
     }
     var thread = GmailApp.getMessageById(String(row[0])).getThread();

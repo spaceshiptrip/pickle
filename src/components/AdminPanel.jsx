@@ -4,6 +4,13 @@ import { apiGet, apiPost } from "../api";
 
 const COURT_OPTIONS = ["North", "South", "Other"];
 
+function venmoSessionLabel(reservation) {
+  const date = new Date(`${reservation.Date}T12:00:00`);
+  const [hour, minute] = String(reservation.Start || "00:00").split(":").map(Number);
+  const time = new Date(2000, 0, 1, hour, minute).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return `${date.toLocaleDateString("en-US", { weekday: "short", month: "2-digit", day: "2-digit" }).replace(",", "")} ${time} ${reservation.Court}`;
+}
+
 function Spinner({ className = "h-4 w-4" }) {
   return (
     <span
@@ -59,6 +66,7 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
 
   const [venmoReviews, setVenmoReviews] = useState([]);
   const [venmoSelections, setVenmoSelections] = useState({});
+  const [venmoSessions, setVenmoSessions] = useState({});
   const [venmoResult, setVenmoResult] = useState("");
   const [venmoBusy, setVenmoBusy] = useState(false);
 
@@ -293,13 +301,25 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
     } catch (e) { setVenmoResult(e.message); }
   }
 
+  const venmoReservations = reservations.filter((r) => {
+    const date = new Date(`${r.Date}T12:00:00`);
+    const today = new Date(); today.setHours(12, 0, 0, 0);
+    const days = Math.round((date - today) / 86400000);
+    return String(r.Status).toLowerCase() === "reserved" && days >= -60 && days <= 14;
+  }).sort((a, b) => `${b.Date} ${b.Start}`.localeCompare(`${a.Date} ${a.Start}`));
+  const selectedVenmoSession = (row) => venmoSessions[row.MessageId] ?? (row.SuggestedReservationIds || []).find((id) => venmoReservations.some((r) => String(r.Id) === String(id))) ?? "";
+
   async function resolveVenmo(row, dismiss) {
     const userId = venmoSelections[row.MessageId];
     const player = usersById[userId];
-    if (!dismiss && (!player || !confirm(`Mark ${pickUserName(player)} paid from ${row.Payer} $${Number(row.Amount).toFixed(2)}?`))) return;
+    const reservationId = selectedVenmoSession(row);
+    const session = venmoReservations.find((r) => String(r.Id) === String(reservationId));
+    const fee = Number(session?.BaseFee);
+    const spots = fee > 0 ? Math.min(6, Math.floor(Math.round(Number(row.Amount) * 100) / Math.round(fee * 100))) : 0;
+    if (!dismiss && (!player || !session || !(fee > 0) || !confirm(`Mark ${pickUserName(player)} paid for ${venmoSessionLabel(session)}: $${Number(row.Amount).toFixed(2)} = ${spots} spot(s) at $${fee.toFixed(2)}.`))) return;
     setVenmoBusy(true);
     try {
-      const r = await apiPost("resolvevenmo", dismiss ? { messageId: row.MessageId, dismiss: true } : { messageId: row.MessageId, userId });
+      const r = await apiPost("resolvevenmo", dismiss ? { messageId: row.MessageId, dismiss: true } : { messageId: row.MessageId, userId, reservationId });
       setVenmoResult(r.ok ? `${row.Payer}: ${r.result} (${r.rowsMarked} rows marked)` : `Error: ${r.error}`);
       await loadVenmoReviews();
     } catch (e) { setVenmoResult(`Error: ${e.message}`); }
@@ -1416,7 +1436,11 @@ export default function AdminPanel({ role, editReservation, onSaveSuccess }) {
                       <option value="">Select player</option>
                       {Object.entries(usersById).map(([id, user]) => <option key={id} value={id}>{pickUserName(user) || id}</option>)}
                     </select>
-                    <button disabled={venmoBusy || !venmoSelections[row.MessageId]} onClick={() => resolveVenmo(row, false)} className="bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm font-bold disabled:opacity-50">Assign</button>
+                    <select aria-label={`Session for ${row.Payer}`} value={selectedVenmoSession(row)} onChange={(e) => setVenmoSessions({ ...venmoSessions, [row.MessageId]: e.target.value })} className="border rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600">
+                      <option value="">Select session</option>
+                      {venmoReservations.map((r) => <option key={r.Id} value={r.Id}>{venmoSessionLabel(r)}</option>)}
+                    </select>
+                    <button disabled={venmoBusy || !venmoSelections[row.MessageId] || !selectedVenmoSession(row)} onClick={() => resolveVenmo(row, false)} className="bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm font-bold disabled:opacity-50">Assign</button>
                     <button disabled={venmoBusy} onClick={() => resolveVenmo(row, true)} className={smallButtonClass}>Not pickleball</button>
                   </div>
                 </div>
