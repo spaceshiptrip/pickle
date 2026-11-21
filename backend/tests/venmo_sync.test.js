@@ -56,7 +56,7 @@ context.parseYmd_ = s => { const [y, m, d] = s.split('-').map(Number); return ne
 assert.deepEqual(Array.from(context.listVenmoReview_()[0].SuggestedReservationIds), ['r1']);
 assert.equal(context.resolveVenmo_({ messageId: 'm1', userId: 'u1', reservationId: 'r2' }).error, 'bad_reservation');
 assert.equal(tables.Users[1][2], '');
-assert.deepEqual(normalize(context.resolveVenmo_({ messageId: 'm1', userId: 'u1', reservationId: 'r1' })), { ok: true, result: 'review', rowsMarked: 2 });
+assert.deepEqual(normalize(context.resolveVenmo_({ messageId: 'm1', userId: 'u1', reservationId: 'r1' })), { ok: true, result: 'done', rowsMarked: 2 });
 assert.equal(tables.Attendance[1][6], 10);
 assert.equal(tables.Attendance[2][6], 0);
 assert.deepEqual(tables.Attendance[3], ['2026-11-19', 2, 'Pat Example +1', 'u1', 1, 10, 10, 'r1']);
