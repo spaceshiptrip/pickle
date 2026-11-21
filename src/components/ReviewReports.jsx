@@ -646,6 +646,9 @@ export default function ReviewReports({ user, onClose }) {
               </span>{" "}
               means credit
             </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Paid with Venmo? Your Paid status updates automatically within about 10 minutes. Keep the note the button fills in; it tells us which session you paid for.
+            </p>
 
             {/* Details */}
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">

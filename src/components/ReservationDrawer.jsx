@@ -920,6 +920,11 @@ className={`
                   )
                 )}
               </div>
+              {!isProposed && (
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  Paid with Venmo? Your Paid status updates automatically within about 10 minutes. Keep the note the button fills in; it tells us which session you paid for.
+                </p>
+              )}
             </div>
 
             <div className="mt-6">
