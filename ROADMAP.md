@@ -82,6 +82,12 @@ codex_task) in ath-bot/ops/mcp.
    hand for now); times for 4/16 and 4/18 sessions (blank = hidden on calendar).
 7. [ ] Later: QR check-in at the courts, monthly statement email, iMessage
    group text for bot results.
+8. [ ] Low priority: club events without Playwright. The calendar list view
+   (https://www.athenaeumcaltech.com/Default.aspx?p=v35Calendar&view=l3&tab=l5&ssid=295099&vnf=1)
+   has a "Load more" button at the bottom. Check (signed in, browser pane,
+   network tab) whether "Load more" calls a JSON/AJAX endpoint that
+   club_events(from, to) can request directly with the bot's session cookie.
+   If it's an ASP.NET postback (__VIEWSTATE), keep Playwright.
 
 ## Next up (priority set November 18, 2026)
 
