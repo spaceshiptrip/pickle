@@ -48,6 +48,26 @@ function name (`migrateUsersToLoginHash` vs `migrateUsersToLoginHash_`).
 - **Partial payments** can't be recorded as "partial" by `markPaid_`, which
   sets PAID to the full charge or 0.
 
+## Sprint (November 22-28, 2026)
+
+Codex codes (ChatGPT plan); Claude writes jobs, reviews, runs the browser.
+Claude usage: 65% used, resets Thu 11/26; one free reset expires Dec 10
+(plan it for the UI/reports week).
+
+1. [ ] Sun 11/22: Jay says who played -> Attendance rows (unpaid by default),
+   payment check, bot reminder texts (preview -> Jay says "send").
+2. [ ] Mac mini prep (deadline Nov 29, between the Tue and Sat runs): launchd
+   install script with repo-relative paths; drop the bare "confirmed" marker.
+3. [ ] You and Cora auto-paid (small Codex job).
+4. [ ] Athenaeum walkthrough (~30 min, Jay signs in, observe only) -> Codex
+   builds book / cancel / my_reservations / club_events tools.
+5. [ ] Auto-cancel South (#129), after the cancel tool.
+6. [ ] App speed: measure request timings, then cache (stale-while-revalidate,
+   one bootstrap call, CacheService, lazy-load admin/calendar).
+7. [ ] Reports redesign + running balance (#130); quick wins #110 #22 #44 #19 #103.
+
+Before Thursday: 1-3 (+4 if short). After the reset: 5-7.
+
 ## TODO (November 20, 2026)
 
 Done Nov 20: Venmo -> PAID live (Apps Script timer every 10 min, VenmoLog,
