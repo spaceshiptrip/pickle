@@ -73,7 +73,11 @@ Claude usage: 65% used, resets Thu 11/26; one free reset expires Dec 10
      statements on secure.clubessential.com, read-only) every 2 weeks via launchd,
      appends new lines (dedupe by Tracking #), matches court lines to Reservations.
      Rate seen: $17 per court-hour (Prime); Open Play $10.
-   - Mismatches (billed hours vs booked courts x hours) -> notify Jay.
+   - The club bill is the source of truth (Jay): courts cancelled or added
+     by hand may not be in the app. Rates differ by hour (Prime vs non-Prime,
+     lights at night), so match on the line's hours/description, not a fixed rate.
+   - Mismatches (billed hours vs booked courts x hours) -> ask Jay, then fix the
+     sheet's reservation to match the bill.
      Nov 2026 to check: 11/4 1h, 11/8 2h, 11/15 1h billed.
    - Admin "Monthly" view (UI/UX refresh): club billed vs collected from players
      vs open balances, per month; mark a month reconciled.
