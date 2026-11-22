@@ -66,7 +66,20 @@ Claude usage: 65% used, resets Thu 11/26; one free reset expires Dec 10
    one bootstrap call, CacheService, lazy-load admin/calendar).
 7. [ ] Reports redesign + running balance (#130); quick wins #110 #22 #44 #19 #103.
 
-Before Thursday: 1-3 (+4 if short). After the reset: 5-7.
+8. [ ] Club billing in the sheet + monthly reconciliation (Jay, 2026-11-22).
+   - New tab ClubBilling: Date, Tracking, Description, Hours, Amount, Kind
+     (court/openplay/payment/other), ReservationId (matched), Status (ok/mismatch).
+   - ath-bot reads the Athenaeum statement (Recent Transactions + monthly
+     statements on secure.clubessential.com, read-only) every 2 weeks via launchd,
+     appends new lines (dedupe by Tracking #), matches court lines to Reservations.
+     Rate seen: $17 per court-hour (Prime); Open Play $10.
+   - Mismatches (billed hours vs booked courts x hours) -> notify Jay.
+     Nov 2026 to check: 11/4 1h, 11/8 2h, 11/15 1h billed.
+   - Admin "Monthly" view (UI/UX refresh): club billed vs collected from players
+     vs open balances, per month; mark a month reconciled.
+   - Site notes: ath-bot handoff/notes/athenaeum-site-2026-11-22.md.
+
+Before Thursday: 1-3 (+4 if short). After the reset: 5-8.
 
 ## TODO (November 20, 2026)
 
