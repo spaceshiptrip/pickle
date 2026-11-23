@@ -83,6 +83,15 @@ Claude usage: 65% used, resets Thu 11/26; one free reset expires Dec 10
      vs open balances, per month; mark a month reconciled.
    - Site notes: ath-bot handoff/notes/athenaeum-site-2026-11-22.md.
 
+9. [ ] Game reminder texts (Jay, 2026-11-22; iterate on wording first):
+   2 days before and the morning of each upcoming session, text the group
+   list, filtered by membership status (member, JPL, JPL Plus, ...).
+   Same bot tool (preview -> Jay says "send"), later a scheduled run.
+   Needs: a status/group column in Users we can filter on.
+10. [ ] After-game texts (in progress): everyone who played gets "thanks +
+   paid / not yet paid"; two fixed templates; replaces the unpaid-only
+   template in pickleball-ops send tool.
+
 Before Thursday: 1-3 (+4 if short). After the reset: 5-8.
 
 ## TODO (November 20, 2026)
