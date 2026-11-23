@@ -118,6 +118,10 @@ Claude usage: 65% used, resets Thu 11/26; one free reset expires Dec 10
    everyone with Users.GameTexts = 1 (Jay set the list; no group filter). STOP GAMES reader
    NOT USED: Jay declined Full Disk Access for Python (too broad). v1: Jay tells Claude who
    replied STOP GAMES -> GameTexts=0 + confirmation text. Later: on/off toggle in the app.
+10d. [ ] RSVP confirmation text (Jay, 2026-11-23): when someone signs up in the app
+   they get a text "You're in for <Day M/D>, <time>. Can't make it? Cancel in the app."
+   Same Mac job as 10b (poll a "recent sign-ups" feed every few minutes; fixed template;
+   Users.TextVia; GameTexts does not apply). Build together with 10b.
 11. [ ] Users "FirstName" column for texts ("Hi Joe!" not "Hi JoeO!"); fall
    back to Name when blank. Fill in the ones we know.
 
