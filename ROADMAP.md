@@ -114,6 +114,10 @@ Claude usage: 65% used, resets Thu 11/26; one free reset expires Dec 10
    (b) read-only tool: incoming Messages replies containing STOP GAMES from known phones
    (chat.db; Jay granted Full Disk Access to Claude 2026-11-22) -> Claude sets GameTexts=0 ->
    fixed confirmation text ("unsubscribed from game reminders; after-game texts continue").
+   UPDATE 2026-11-22 21:22: tools built (ath-bot f45f8d7, cancel 79f6089). Recipients =
+   everyone with Users.GameTexts = 1 (Jay set the list; no group filter). STOP GAMES reader
+   NOT USED: Jay declined Full Disk Access for Python (too broad). v1: Jay tells Claude who
+   replied STOP GAMES -> GameTexts=0 + confirmation text. Later: on/off toggle in the app.
 11. [ ] Users "FirstName" column for texts ("Hi Joe!" not "Hi JoeO!"); fall
    back to Name when blank. Fill in the ones we know.
 
