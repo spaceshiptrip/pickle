@@ -59,6 +59,10 @@ Claude usage: 65% used, resets Thu 11/26; one free reset expires Dec 10
 2. [ ] Mac mini prep (deadline Nov 29, between the Tue and Sat runs): launchd
    install script with repo-relative paths; drop the bare "confirmed" marker.
 3. [ ] You and Cora auto-paid (small Codex job).
+3b. [ ] PRIORITY (Jay, 2026-11-22): a "Pay" button players can find without
+   hunting: on the home screen / personal report, showing what they owe and
+   opening Venmo with the right note. Today they must tap the session date on
+   the calendar, then Pay. After-game texts will point to it.
 4. [ ] Athenaeum walkthrough (~30 min, Jay signs in, observe only) -> Codex
    builds book / cancel / my_reservations / club_events tools.
 5. [ ] Auto-cancel South (#129), after the cancel tool.
