@@ -1,7 +1,7 @@
 /* Venmo notification reconciliation. Dry runs log once; a later live run still processes them. */
 function parseVenmoSubject_(s) {
-  var match = String(s || '').match(/^(.+?) paid you \$([\d,]+\.\d{2})/);
-  return match ? { payer: match[1].trim(), amount: Number(match[2].replace(/,/g, '')) } : null;
+  var match = String(s || '').match(/^(?!You paid\b)(.+?) paid (?:you \$([\d,]+\.\d{2})|\$([\d,]+\.\d{2}) to your Venmo account)/);
+  return match && match[1].trim() ? { payer: match[1].trim(), amount: Number((match[2] || match[3]).replace(/,/g, '')) } : null;
 }
 
 function parseVenmoNote_(body) {

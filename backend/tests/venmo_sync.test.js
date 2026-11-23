@@ -16,6 +16,8 @@ const tests = [
   ['M/D and previous year', () => assert.deepEqual(dates('games 12/31', new Date(2026, 0, 2)), ['2025-12-31'])],
   ['two dates', () => assert.deepEqual(dates('games 9/16 and 10-14'), ['2026-09-16', '2026-10-14'])],
   ['you paid skipped', () => assert.equal(context.parseVenmoSubject_('You paid Example Player $10.00'), null)],
+  ['payment subject formats', () => { assert.deepEqual(JSON.parse(JSON.stringify(context.parseVenmoSubject_('Rhoniel Chan paid $10.00 to your Venmo account. Leave it in Venmo'))), { payer: 'Rhoniel Chan', amount: 10 }); assert.deepEqual(JSON.parse(JSON.stringify(context.parseVenmoSubject_('  Example Player paid you $1,234.50'))), { payer: 'Example Player', amount: 1234.5 }); assert.equal(context.parseVenmoSubject_('You paid X $5.00'), null); assert.equal(context.parseVenmoSubject_('Example charged you $5.00'), null); assert.equal(context.parseVenmoSubject_('Example requests $5.00'), null); assert.equal(context.parseVenmoSubject_('Example paid $1,234.50 to your Venmo account').amount, 1234.5); }],
+  ['new payment body contains session date', () => { const note = context.parseVenmoNote_('Rhoniel chan paid you $10.00\nRhoniel chan paid you $ 10 . 00 Picklebal Sun 11/22 See transaction ...'); assert.deepEqual(dates(note, new Date(2026, 10, 22)), ['2026-11-22']); }],
   ['account notice skipped', () => assert.equal(context.parseVenmoSubject_('Your account notice'), null)],
   ['amount with comma', () => assert.equal(context.parseVenmoSubject_('Example Player paid you $1,234.50').amount, 1234.5)],
   ['note from body', () => assert.equal(context.parseVenmoNote_('Payment received\nNote: Pickleball 2026-11-19 18:30\nThanks'), 'Pickleball 2026-11-19 18:30')],
