@@ -102,6 +102,10 @@ Claude usage: 65% used, resets Thu 11/26; one free reset expires Dec 10
    paid / not yet paid"; two fixed templates; replaces the unpaid-only
    template in pickleball-ops send tool. Wording agreed 2026-11-22 (paid /
    not paid, "Hi <name>", app link first, then "text Jay at 818-653-9874").
+10b. [ ] Payment-received text (Jay OK 2026-11-22): a launchd job on the Mac
+   every 10 min reads newly paid rows (VenmoLog done) and texts "Got your $X
+   for <Day>, thank you! You're marked PAID." (fixed template, SMS/iMessage by
+   Users.TextVia). Jay OKs the first sends, then it runs on its own.
 11. [ ] Users "FirstName" column for texts ("Hi Joe!" not "Hi JoeO!"); fall
    back to Name when blank. Fill in the ones we know.
 
