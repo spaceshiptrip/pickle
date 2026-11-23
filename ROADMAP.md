@@ -92,6 +92,12 @@ Claude usage: 65% used, resets Thu 11/26; one free reset expires Dec 10
    list, filtered by membership status (member, JPL, JPL Plus, ...).
    Same bot tool (preview -> Jay says "send"), later a scheduled run.
    Needs: a status/group column in Users we can filter on.
+   Unsubscribe (Jay, 2026-11-22): game-reminder texts end with "Reply STOP
+   GAMES to stop game reminders." Users.GameReminders = off -> no game
+   reminders. After-game thanks/paid texts and billing texts are NOT
+   affected (no opt-out). Replies land in Jay's Messages: v1 Jay tells Claude
+   and Claude sets the column; v2 the bot reads replies (needs Messages
+   access on the Mac) or a toggle in the app.
 10. [ ] After-game texts (in progress): everyone who played gets "thanks +
    paid / not yet paid"; two fixed templates; replaces the unpaid-only
    template in pickleball-ops send tool. Wording agreed 2026-11-22 (paid /
