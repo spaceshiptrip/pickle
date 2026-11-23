@@ -106,6 +106,14 @@ Claude usage: 65% used, resets Thu 11/26; one free reset expires Dec 10
    every 10 min reads newly paid rows (VenmoLog done) and texts "Got your $X
    for <Day>, thank you! You're marked PAID." (fixed template, SMS/iMessage by
    Users.TextVia). Jay OKs the first sends, then it runs on its own.
+10c. [ ] MONDAY 11/23 (one Codex job, ath-bot ops/mcp): (a) game-reminder template:
+   "Pickleball is this <Day M/D>, <time> at the Athenaeum ... RSVP at the app by <deadline>.
+   If fewer than 8 sign up, we'll release one court. If fewer than 4, we may cancel.
+   Reply STOP GAMES to stop game reminders." Recipients: Users group Jay picks AND
+   GameTexts=1 (new column N, 1/0). Wed 11/25 deadline Tue 10 AM; Claude counts RSVPs then.
+   (b) read-only tool: incoming Messages replies containing STOP GAMES from known phones
+   (chat.db; Jay granted Full Disk Access to Claude 2026-11-22) -> Claude sets GameTexts=0 ->
+   fixed confirmation text ("unsubscribed from game reminders; after-game texts continue").
 11. [ ] Users "FirstName" column for texts ("Hi Joe!" not "Hi JoeO!"); fall
    back to Name when blank. Fill in the ones we know.
 
