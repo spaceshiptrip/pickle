@@ -12,6 +12,38 @@ function parseVenmoNote_(body) {
   return quoted ? quoted[1].trim() : text.trim();
 }
 
+function venmoHtmlText_(html) {
+  return String(html || '').replace(/<style\b[^>]*>[\s\S]*?<\/style>|<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ').replace(/&nbsp;|&#160;/gi, ' ').replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/\s+/g, ' ').trim();
+}
+
+function parseVenmoPayment_(subject, plainBody, htmlBody) {
+  var html = venmoHtmlText_(htmlBody), title = String(htmlBody || '').match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
+  var htmlLines = String(htmlBody || '').split(/<[^>]+>/).map(venmoHtmlText_);
+  var sources = [String(subject || ''), String(plainBody || ''), title ? venmoHtmlText_(title[1]) : '', html].concat(htmlLines);
+  var amountPattern = '\\$\\s*([\\d,]+(?:\\s*\\.\\s*\\d{2})?)';
+  var pattern = new RegExp('(?:^|[\\n\\r])\\s*(.+?)\\s+(?:paid\\s+you\\s+' + amountPattern + '|paid\\s+' + amountPattern + '\\s+to\\s+your\\s+Venmo\\s+account|sent\\s+you\\s+' + amountPattern + ')', 'i');
+  var parsed = null;
+  sources.forEach(function (source) {
+    var match = source.match(pattern);
+    if (!match || /\b(?:you|request|requests)\b/i.test(match[1])) return;
+    if (!parsed) parsed = { payer: match[1].trim(), amount: Number((match[2] || match[3] || match[4]).replace(/[\s,]/g, '')), note: '' };
+  });
+  if (!parsed) return null;
+  var bodies = [String(plainBody || ''), html], labeled, between, quoted;
+  bodies.some(function (body) { var m = body.match(/\b(?:note|message)\s*:\s*([^\n\r<]+)/i); if (m) { labeled = m[1].trim(); return true; } return false; });
+  bodies.some(function (body) { var m = body.match(/\$\s*[\d,]+(?:\s*\.\s*\d{2})?\s+([^\n\r]*?)\s+See transaction\b/i); if (m) { between = m[1].trim(); return true; } return false; });
+  bodies.some(function (body) { var m = body.match(/[“"]([^”"\n]+)[”"]/); if (m) { quoted = m[1].trim(); return true; } return false; });
+  parsed.note = labeled || between || quoted || '';
+  return parsed;
+}
+
+function venmoMoneyRelated_(subject, plainBody, htmlBody) {
+  var text = [subject, plainBody, venmoHtmlText_(htmlBody)].join(' ');
+  return /\$\s*[\d,]+(?:\s*\.\s*\d{1,2})?/.test(text) && /\b(?:paid|sent|payment|transfer|money)\b/i.test(text);
+}
+
 function sessionDatesFromNote_(note, receivedDate) {
   var text = String(note || '').replace(/\+/g, ' '), dates = [], seen = {};
   function add(y, m, d) {
@@ -206,20 +238,21 @@ function venmoSync() {
     if (reservationIdx.Id === undefined || reservationIdx.Status === undefined) throw new Error('Reservations missing Id or Status');
     var statuses = {};
     reservations.forEach(function (row) { statuses[String(row[reservationIdx.Id])] = String(row[reservationIdx.Status] || '').trim().toLowerCase(); });
-    var threads = GmailApp.search('from:venmo@venmo.com newer_than:30d -label:venmo-done -label:venmo-review -label:venmo-skipped');
+    var threads = GmailApp.search('from:venmo.com newer_than:30d -label:venmo-done -label:venmo-review -label:venmo-skipped');
     var messages = [];
     threads.forEach(function (thread) { thread.getMessages().forEach(function (message) { messages.push({ thread: thread, message: message }); }); });
     messages.sort(function (a, b) { return a.message.getDate().getTime() - b.message.getDate().getTime(); });
     var threadResults = [], newReviews = [];
     messages.forEach(function (item) {
       var message = item.message, id = message.getId();
-      if (!/(?:^|[<\s])venmo@venmo\.com(?:>|$)/i.test(message.getFrom().trim()) || seen[id]) return;
-      var parsed = parseVenmoSubject_(message.getSubject()), note = parsed ? parseVenmoNote_(message.getPlainBody()) : '';
-      var plan = parsed ? venmoPlan_(parsed.payer, parsed.amount, sessionDatesFromNote_(note, message.getDate()), users, userIdx, att, attIdx, statuses) : { result: 'skipped', rows: [] };
+      if (!/(?:^|[<\s])[^\s<>@]+@venmo\.com(?:>|$)/i.test(message.getFrom().trim()) || seen[id]) return;
+      var subject = message.getSubject(), plain = message.getPlainBody(), html = message.getBody();
+      var parsed = parseVenmoPayment_(subject, plain, html), note = parsed ? parsed.note : subject;
+      var plan = parsed ? venmoPlan_(parsed.payer, parsed.amount, sessionDatesFromNote_(note, message.getDate()), users, userIdx, att, attIdx, statuses) : { result: venmoMoneyRelated_(subject, plain, html) ? 'review' : 'skipped', rows: [] };
       if (live) plan.rows.forEach(function (entry) { sheet.getRange(entry.row, attIdx.PAID + 1).setValue(entry.charge); att[entry.row - 2][attIdx.PAID] = entry.charge; });
       else plan.rows.forEach(function (entry) { att[entry.row - 2][attIdx.PAID] = entry.charge; });
       log.appendRow([id, message.getDate(), parsed ? parsed.payer : '', parsed ? parsed.amount : '', note, plan.result, plan.rows.length, live ? 'live' : 'dry']);
-      if (live && plan.result === 'review') newReviews.push(parsed.payer + ' | $' + parsed.amount.toFixed(2) + ' | ' + note);
+      if (live && plan.result === 'review') newReviews.push(parsed ? parsed.payer + ' | $' + parsed.amount.toFixed(2) + ' | ' + note : note);
       seen[id] = true;
       threadResults.push({ thread: item.thread, result: plan.result });
     });

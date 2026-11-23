@@ -64,3 +64,16 @@ assert.equal(tables.Attendance[2][6], 0);
 assert.deepEqual(tables.Attendance[3], ['2026-11-19', 2, 'Pat Example +1', 'u1', 1, 10, 10, 'r1']);
 assert.equal(tables.VenmoLog[1][6], 2);
 console.log('ok - offline review and assignment integration');
+
+const payment = (subject, body = '', html = '') => normalize(context.parseVenmoPayment_(subject, body, html));
+const real = payment('Rhoniel Chan paid $10.00 to your Venmo account. Leave it in Venmo or transfer it to your bank account.', 'Rhoniel chan paid you $10.00\nRhoniel chan paid you $ 10 . 00 Picklebal Sun 11/22 See transaction Money credited to your Venmo account.');
+assert.equal(real.payer, 'Rhoniel Chan'); assert.equal(real.amount, 10); assert.match(real.note, /Sun 11\/22/); assert.deepEqual(dates(real.note, new Date(2026, 10, 22)), ['2026-11-22']);
+assert.equal(payment('Unknown wording', 'Pat paid you $12.00').payer, 'Pat');
+assert.equal(payment('Old Name paid you $5.00').amount, 5);
+assert.equal(payment('', '', '<html><title>Pat sent you $ 10 . 00</title></html>').amount, 10);
+assert.equal(payment('You paid X $5.00'), null);
+assert.equal(payment('Pat requests $5.00'), null);
+assert.equal(payment('Pat charged you $5.00'), null);
+assert.equal(context.venmoMoneyRelated_('Venmo statement $5.00 payment ...', '', ''), true);
+assert.equal(context.venmoMoneyRelated_('New remembered device added', '', ''), false);
+console.log('ok - robust payment parsing and classification');
