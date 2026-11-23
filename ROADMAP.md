@@ -118,6 +118,14 @@ Claude usage: 65% used, resets Thu 11/26; one free reset expires Dec 10
    everyone with Users.GameTexts = 1 (Jay set the list; no group filter). STOP GAMES reader
    NOT USED: Jay declined Full Disk Access for Python (too broad). v1: Jay tells Claude who
    replied STOP GAMES -> GameTexts=0 + confirmation text. Later: on/off toggle in the app.
+10e. [ ] NEW game-notice wording (Jay, 2026-11-23; use for all future game notices;
+   replaces the f45f8d7 template; build with the Tuesday job):
+   both courts: "🤖 Hi {first}! Pickle Bot here. Pickleball is {Dow M/D}, {time} at the
+   Athenaeum (both courts reserved). If you'd like to play, please RSVP by {Dow MM/DD}
+   10 AM at https://pickle.nadabarkada.com. (Under 8 = 1 court; under 4 = canceled.)
+   Reply STOP GAMES to stop game reminders."
+   one court: "(1 court reserved)" and "(Under 4 = canceled.)". Deadline label now carries
+   the date, e.g. "Tue 11/24 10 AM".
 10d. [ ] RSVP confirmation text (Jay, 2026-11-23): when someone signs up in the app
    they get a text "You're in for <Day M/D>, <time>. Can't make it? Cancel in the app."
    Same Mac job as 10b (poll a "recent sign-ups" feed every few minutes; fixed template;
