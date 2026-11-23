@@ -13,6 +13,7 @@ const tests = [
   ['VenmoName list and handle match', () => { assert.equal(context.venmoUser_('Sam Example', users, uidx), '1'); assert.equal(context.venmoUser_('@solo-ex', users, uidx), '2'); assert.equal(context.venmoUser_('Pat', users, uidx), null); }],
 
   ['app note formats', () => { assert.deepEqual(dates('Pickleball 2026-11-19 18:30'), ['2026-11-19']); assert.deepEqual(dates('Pickleball+2026-11-19+18:30'), ['2026-11-19']); }],
+  ['ISO dates with and without a time', () => { assert.deepEqual(dates('Pickleball 2026-11-22'), ['2026-11-22']); assert.deepEqual(dates('pickleball 2026-11-22 19:00'), ['2026-11-22']); assert.deepEqual(dates('2026-11-22 and 11/25', new Date(2026, 10, 26)), ['2026-11-22', '2026-11-25']); }],
   ['M/D and previous year', () => assert.deepEqual(dates('games 12/31', new Date(2026, 0, 2)), ['2025-12-31'])],
   ['two dates', () => assert.deepEqual(dates('games 9/16 and 10-14'), ['2026-09-16', '2026-10-14'])],
   ['you paid skipped', () => assert.equal(context.parseVenmoSubject_('You paid Example Player $10.00'), null)],

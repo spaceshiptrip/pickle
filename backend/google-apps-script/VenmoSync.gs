@@ -52,7 +52,7 @@ function sessionDatesFromNote_(note, receivedDate) {
     var key = y + '-' + ('0' + m).slice(-2) + '-' + ('0' + d).slice(-2);
     if (!seen[key]) { seen[key] = true; dates.push(key); }
   }
-  var app = /\bPickleball\s+(\d{4})-(\d{2})-(\d{2})\s+\d{1,2}:\d{2}\b/gi, match;
+  var app = /\b(\d{4})-(\d{2})-(\d{2})\b/g, match;
   while ((match = app.exec(text))) add(Number(match[1]), Number(match[2]), Number(match[3]));
   // Remove ISO dates so their month/day components cannot be interpreted again.
   text = text.replace(/\b\d{4}-\d{2}-\d{2}\b/g, '');
