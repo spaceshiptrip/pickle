@@ -126,6 +126,19 @@ Claude usage: 65% used, resets Thu 11/26; one free reset expires Dec 10
    Reply STOP GAMES to stop game reminders."
    one court: "(1 court reserved)" and "(Under 4 = canceled.)". Deadline label now carries
    the date, e.g. "Tue 11/24 10 AM".
+10f. [ ] OVERHAUL + MESSAGE CLEANUP (Jay, 2026-11-23):
+   - One place for all bot texts (template list): after-game paid / not paid, game notice
+     (10e wording), RSVP confirmation (10d), payment thanks (10b), unsubscribe confirm.
+     Same greeting/footer style; Users.FirstName (11); SMS/iMessage by Users.TextVia.
+   - Drafts Jay approved 2026-11-23 (he sent them by hand to Jenn):
+     RSVP: "🤖 Hi {first}! Pickle Bot here. You're signed up for {Dow M/D}, {time} at the
+     Athenaeum. See you there! Can't make it? Cancel at https://pickle.nadabarkada.com."
+     Paid: "🤖 Hi {first}! Pickle Bot here. Got your ${amt} for {Dow M/D}, thank you!
+     You're marked PAID. Check anytime at https://pickle.nadabarkada.com."
+   - Venmo: household names (Jennifer Rivera is on Randy's VenmoName -> Jenn's payments
+     credit Randy -> review); outgoing "You paid ..." emails and bank transfers -> skipped.
+   - Visibility/auth cleanup (role vs groups vs user IDs confusing; multi-group users never
+     match a group); Users.Notes may hold plaintext PINs -> remove.
 10d. [ ] RSVP confirmation text (Jay, 2026-11-23): when someone signs up in the app
    they get a text "You're in for <Day M/D>, <time>. Can't make it? Cancel in the app."
    Same Mac job as 10b (poll a "recent sign-ups" feed every few minutes; fixed template;
