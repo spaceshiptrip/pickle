@@ -94,7 +94,10 @@ Claude usage: 65% used, resets Thu 11/26; one free reset expires Dec 10
    Needs: a status/group column in Users we can filter on.
 10. [ ] After-game texts (in progress): everyone who played gets "thanks +
    paid / not yet paid"; two fixed templates; replaces the unpaid-only
-   template in pickleball-ops send tool.
+   template in pickleball-ops send tool. Wording agreed 2026-11-22 (paid /
+   not paid, "Hi <name>", app link first, then "text Jay at 818-653-9874").
+11. [ ] Users "FirstName" column for texts ("Hi Joe!" not "Hi JoeO!"); fall
+   back to Name when blank. Fill in the ones we know.
 
 Before Thursday: 1-3 (+4 if short). After the reset: 5-8.
 
