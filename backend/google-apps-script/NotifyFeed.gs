@@ -53,3 +53,30 @@ function botFeed_(p) {
   });
   return { ok: true, generatedAt: new Date().toISOString(), sessions: sessions, rows: rows, users: users };
 }
+
+/** Read-only routing roster; email addresses and credentials stay private. */
+function botRoster_(p) {
+  var secret = PropertiesService.getScriptProperties().getProperty("BOT_SHARED_SECRET");
+  if (!secret || p.secret !== secret) return { ok: false, error: "forbidden" };
+  var table = readTable_(sheetByName(USERS_SHEET_NAME));
+  var idx = headerIndexMap_(table.header);
+  function value(row, key) { return idx[key] === undefined ? "" : row[idx[key]]; }
+  function str(v) { return String(v == null ? "" : v).trim(); }
+  var users = table.rows.map(function(row) {
+    var email = str(value(row, "Email")).toLowerCase();
+    var active = str(value(row, "Active")).toLowerCase();
+    return {
+      userId: str(value(row, "UserId")),
+      name: str(value(row, "Name")),
+      firstName: str(value(row, "FirstName")),
+      role: str(value(row, "Role")).toLowerCase(),
+      active: active === "1" || active === "true",
+      phone: str(value(row, "Phone")).replace(/\D/g, ""),
+      textVia: str(value(row, "TextVia")),
+      hasEmail: !!email,
+      emailSha256: email ? sha256Hex_(email) : "",
+      household: str(value(row, "Household"))
+    };
+  });
+  return { ok: true, users: users };
+}
