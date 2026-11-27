@@ -79,6 +79,16 @@ Next: go live after a few trial texts -> book on request + My Reservations -> au
      auto-release, reservation sync, billing); ad-hoc work = admin buttons in the app
      (UI/UX refresh); the MCP stays only as a convenience.
 5. Nightly reservation sync (Athenaeum My Reservations <-> sheet; text Jay on fixes).
+5b. Android / remote-safe delivery (Jay, 2026-11-27): Mac SMS and mixed (MMS) group posts only
+   work when Jay's iPhone is near the Mac; when it is not, the whole Fun Group post fails
+   (iPhone members too) and the Mac reports success anyway. Fix ($0):
+   - Fun Group announcements: do NOT post into the mixed thread; fan out one-to-one instead:
+     iPhone members -> iMessage (works remotely); Android members (Users.TextVia = sms:
+     Rhon, Randy, Marie) -> SMS (when the phone is near) AND email (always) via the Apps
+     Script / Gmail account. Member list from the chat's participants (read-only) mapped to
+     Users by phone. JPL Pickle Crew (all iPhone) keeps the group post.
+   - All personal texts to sms users also go by email when Users.Email exists; no email
+     (Marie) = SMS only, not a blocker.
 6. Message cleanup (FirstName, one style; keep GameTexts as Android fallback if the
    Fun Group post fails).
 Then: game-text switch in app, reports + running balance, speed, UI/UX refresh (Fable).
