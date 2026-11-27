@@ -57,6 +57,15 @@ baseline 17 keys). Bot launchd agents installed in ~/Library/LaunchAgents (survi
 Jay logs in after a restart). After-game texts name covered guests (ath-bot 92f8f4e).
 Next: go live after a few trial texts -> book on request + My Reservations -> auto-release.
 
+## Decision 2026-11-26 22:56: groups for announcements, personal texts for accounts
+
+Game announcements / RSVP reminders / court releases go ONLY to the Messages groups
+("Fun Group", "JPL Pickle Crew"), automatically (ath-bot ops/auto_release.py: reminder 11 AM
+the day before the release check; release check 30 h before; 9+ keep both, 5-8 release South,
+4 or less text Jay only). Personal texts only for the person's own account (RSVP confirmation,
+payment thanks, after-game paid / not paid). No personal game notices any more; people who
+want updates join a group or use the app. Users.GameTexts and STOP GAMES become unnecessary.
+
 ## PRIORITY (Jay, 2026-11-26): automatic notifications, no Claude in the loop
 
 Mac launchd job every 10 min (ath-bot ops/notify), fixed approved templates, SMS/iMessage
