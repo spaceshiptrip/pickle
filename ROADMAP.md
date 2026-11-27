@@ -57,7 +57,7 @@ by Users.TextVia, "already sent" log (never twice), $0, no LLM:
 3. After-game paid / not-paid texts at 9 AM the morning after each game (Jay fixes the
    sheet the night before if someone did not play).
 Needs: Apps Script "what's new" feed with the bot secret (checkin-app) + the Mac job.
-Trial week: texts Jay what it WOULD send; then live (Jay OK'd no per-send GO after trial).
+Trial week: texts Jay what it WOULD send; then live without per-send GO (needs Jay's explicit OK).
 Later: post to a named Messages group (announcements only, never balances).
 Also: Wed 11/25 23:55 bot run never started (no log at all) -> check launchctl before Sat.
 
