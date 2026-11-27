@@ -97,3 +97,24 @@ assert.deepEqual(plan(20), { result: 'done', rows: [{ row: 3, charge: 10 }, { ro
 assert.deepEqual(plan(10), { result: 'review', rows: [] });
 assert.deepEqual(Array.from(context.venmoPayerDates_('Pat Example', users, uidx, openRows.concat([['2026-11-29', '2']]), ai)), ['2026-11-27', '2026-11-25']);
 console.log('ok - common note dates and exact-total fallback');
+
+const householdUsers = [
+  ['4', 'Jennifer Rivera', '@jenn', ' Rivera '],
+  ['5', 'Randy Rivera', '@randy', 'rivera'],
+  ['9', 'Other Person', '@other', ''],
+  ['10', 'Another Person', '@another', '']
+];
+const householdIdx = { UserId: 0, VenmoName: 1, Venmo: 2, Household: 3 };
+const householdRows = [
+  ['2026-11-27', '4', 1, 10, 0, 'r2', 'Randy Rivera'],
+  ['2026-11-25', '4', 1, 10, 0, 'r1', 'Jenn'],
+  ['2026-11-25', '5', 1, 10, 0, 'r1', 'Randy']
+];
+const householdPlan = (payer, amount, note, rows = householdRows) => normalize(context.venmoPlan_(payer, amount, Array.from(context.sessionDatesFromNote_(note, received, context.venmoPayerDates_(payer, householdUsers, householdIdx, rows, ai))), householdUsers, householdIdx, rows, ai, statuses, received));
+assert.deepEqual(householdPlan('Randy Rivera', 10, 'Fri 11/27'), { result: 'done', rows: [{ row: 2, charge: 10 }] });
+assert.deepEqual(householdPlan('Jennifer Rivera', 20, '11/25'), { result: 'done', rows: [{ row: 3, charge: 10 }, { row: 4, charge: 10 }] });
+assert.deepEqual(householdPlan('Other Person', 10, '11/27'), { result: 'review', rows: [] });
+assert.deepEqual(householdPlan('Randy Rivera', 15, '11/27'), { result: 'review', rows: [] });
+assert.deepEqual(normalize(context.venmoPlan_('Randy Rivera', 10, ['2026-11-27'], householdUsers, uidx, householdRows, ai, statuses, received)), { result: 'review', rows: [] });
+assert.deepEqual(householdPlan('Jennifer Rivera', 30, ''), { result: 'done', rows: [{ row: 3, charge: 10 }, { row: 4, charge: 10 }, { row: 2, charge: 10 }] });
+console.log('ok - household payments and isolation');

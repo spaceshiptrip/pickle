@@ -113,15 +113,29 @@ function venmoUser_(payer, users, idx) {
   return matches.length === 1 ? String(matches[0][idx.UserId]).trim() : null;
 }
 
+function venmoEligibleUsers_(userId, users, idx) {
+  if (!userId) return [];
+  var ids = [userId];
+  if (idx.Household === undefined) return ids;
+  var payer = users.find(function (row) { return String(row[idx.UserId] || '').trim() === userId; });
+  var household = payer && String(payer[idx.Household] || '').trim().toLowerCase();
+  if (household) users.forEach(function (row) {
+    var id = String(row[idx.UserId] || '').trim();
+    if (id && String(row[idx.Household] || '').trim().toLowerCase() === household && ids.indexOf(id) === -1) ids.push(id);
+  });
+  return ids;
+}
+
 function venmoPayerDates_(payer, users, userIdx, attendance, attIdx) {
-  var userId = venmoUser_(payer, users, userIdx);
-  return attendance.filter(function (row) { return userId && String(row[attIdx.UserId] || '').trim() === userId; })
+  var ids = venmoEligibleUsers_(venmoUser_(payer, users, userIdx), users, userIdx);
+  return attendance.filter(function (row) { return ids.indexOf(String(row[attIdx.UserId] || '').trim()) !== -1; })
     .map(function (row) { return reservationDateKey_(row[attIdx.Date]); }).filter(Boolean);
 }
 
 function venmoPlan_(payer, amount, dates, users, userIdx, attendance, attIdx, statuses, receivedDate) {
   var userId = venmoUser_(payer, users, userIdx), remaining = Math.round(amount * 100), marked = [];
   if (!userId) return { result: 'review', rows: marked };
+  var eligible = venmoEligibleUsers_(userId, users, userIdx);
   if (!dates.length) {
     if (!receivedDate || isNaN(receivedDate.getTime())) return { result: 'review', rows: marked };
     var paymentDay = Date.UTC(receivedDate.getFullYear(), receivedDate.getMonth(), receivedDate.getDate()), open = [];
@@ -129,7 +143,7 @@ function venmoPlan_(payer, amount, dates, users, userIdx, attendance, attIdx, st
       var key = reservationDateKey_(row[attIdx.Date]), date = key && parseYmd_(key);
       var age = date && (paymentDay - Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())) / 86400000;
       var charge = Math.round(Number(row[attIdx.charge]) * 100), paid = Math.round(Number(row[attIdx.PAID] || 0) * 100);
-      if (String(row[attIdx.UserId] || '').trim() === userId && Number(row[attIdx.present]) === 1 &&
+      if (eligible.indexOf(String(row[attIdx.UserId] || '').trim()) !== -1 && Number(row[attIdx.present]) === 1 &&
           String(statuses[String(row[attIdx.ReservationId])] || '').trim().toLowerCase() === 'reserved' &&
           date && age >= 0 && age <= 30 && isFinite(charge) && isFinite(paid) && charge > paid)
         open.push({ row: i + 2, charge: charge / 100, due: charge - paid, date: key });
@@ -139,18 +153,24 @@ function venmoPlan_(payer, amount, dates, users, userIdx, attendance, attIdx, st
       return { result: 'done', rows: open.map(function (entry) { return { row: entry.row, charge: entry.charge }; }) };
     return { result: 'review', rows: marked };
   }
+  var candidates = [];
   attendance.forEach(function (row, i) {
     var date = parseSheetDate_(row[attIdx.Date]);
     if (!date && typeof row[attIdx.Date] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(row[attIdx.Date].trim())) date = parseYmd_(row[attIdx.Date].trim());
     var key = date && date.getFullYear() + '-' + ('0' + (date.getMonth() + 1)).slice(-2) + '-' + ('0' + date.getDate()).slice(-2);
     var charge = Math.round(Number(row[attIdx.charge]) * 100), paid = Math.round(Number(row[attIdx.PAID] || 0) * 100);
-    if (String(row[attIdx.UserId] || '').trim() !== userId || Number(row[attIdx.present]) !== 1 ||
+    if (eligible.indexOf(String(row[attIdx.UserId] || '').trim()) === -1 || Number(row[attIdx.present]) !== 1 ||
         String(statuses[String(row[attIdx.ReservationId])] || '').trim().toLowerCase() !== 'reserved' ||
         dates.indexOf(key) === -1 || !isFinite(charge) || charge <= 0 || !isFinite(paid) || paid >= charge || remaining < charge) return;
-    remaining -= charge;
-    marked.push({ row: i + 2, charge: charge / 100 });
+    candidates.push({ row: i + 2, charge: charge / 100, cents: charge, date: key });
   });
-  return { result: marked.length && remaining === 0 ? 'done' : 'review', rows: marked };
+  candidates.sort(function (a, b) { return a.date.localeCompare(b.date) || a.row - b.row; });
+  candidates.forEach(function (entry) {
+    if (remaining < entry.cents) return;
+    remaining -= entry.cents;
+    marked.push({ row: entry.row, charge: entry.charge });
+  });
+  return marked.length && remaining === 0 ? { result: 'done', rows: marked } : { result: 'review', rows: [] };
 }
 
 function addVenmoName_(existing, name) {
