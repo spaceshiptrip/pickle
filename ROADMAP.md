@@ -83,6 +83,11 @@ Next: go live after a few trial texts -> book on request + My Reservations -> au
    - Long term (Claude out of the loop): scheduled work = scripts (bot, notifier,
      auto-release, reservation sync, billing); ad-hoc work = admin buttons in the app
      (UI/UX refresh); the MCP stays only as a convenience.
+4c. FUTURE PRICING RULE (Jay, 2026-11-27 13:47): one court with exactly 8 players (guests
+   count) -> $5 each instead of $10. Apply at game end (after the list is final, before the
+   10 AM after-game texts): set Charge 5 on that session's rows. Anyone who prepaid $10 gets
+   a $5 credit (needs the running balance, #130) or a refund note. Build after the billing
+   deep dive confirms the margin (1 court 2 h ~ $34 prime; 8 x $5 = $40).
 4b. Outside / free sessions (Jay, 2026-11-27): add_session(place, date, time, free) in the
    sheet tools (e.g. "Viña Vieja / Alice Dog Park Altadena", BaseFee 0). Admin panel bug:
    `BaseFee: editReservation.BaseFee || 5` turns 0 into 5 on edit -> fix (use ?? 5).
