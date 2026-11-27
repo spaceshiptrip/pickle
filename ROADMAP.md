@@ -83,6 +83,11 @@ Next: go live after a few trial texts -> book on request + My Reservations -> au
    - Long term (Claude out of the loop): scheduled work = scripts (bot, notifier,
      auto-release, reservation sync, billing); ad-hoc work = admin buttons in the app
      (UI/UX refresh); the MCP stays only as a convenience.
+4b. Outside / free sessions (Jay, 2026-11-27): add_session(place, date, time, free) in the
+   sheet tools (e.g. "Viña Vieja / Alice Dog Park Altadena", BaseFee 0). Admin panel bug:
+   `BaseFee: editReservation.BaseFee || 5` turns 0 into 5 on edit -> fix (use ?? 5).
+   Bots already safe for them (ath-bot fix/free-sessions: no money texts, no Athenaeum actions).
+   Small-dispute rule (Jay 12:15): under $10 take the player's word + note; $50+ flag Jay.
 5. Nightly reservation sync (Athenaeum My Reservations <-> sheet; text Jay on fixes).
 5b. Android / remote-safe delivery (Jay, 2026-11-27): Mac SMS and mixed (MMS) group posts only
    work when Jay's iPhone is near the Mac; when it is not, the whole Fun Group post fails
