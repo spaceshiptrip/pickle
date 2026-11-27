@@ -48,6 +48,19 @@ function name (`migrateUsersToLoginHash` vs `migrateUsersToLoginHash_`).
 - **Partial payments** can't be recorded as "partial" by `markPaid_`, which
   sets PAID to the full charge or 0.
 
+## PRIORITY (Jay, 2026-11-26): automatic notifications, no Claude in the loop
+
+Mac launchd job every 10 min (ath-bot ops/notify), fixed approved templates, SMS/iMessage
+by Users.TextVia, "already sent" log (never twice), $0, no LLM:
+1. Payment thank-you when a row turns PAID (names covered guests).
+2. Sign-up confirmation when someone RSVPs.
+3. After-game paid / not-paid texts at 9 AM the morning after each game (Jay fixes the
+   sheet the night before if someone did not play).
+Needs: Apps Script "what's new" feed with the bot secret (checkin-app) + the Mac job.
+Trial week: texts Jay what it WOULD send; then live (Jay OK'd no per-send GO after trial).
+Later: post to a named Messages group (announcements only, never balances).
+Also: Wed 11/25 23:55 bot run never started (no log at all) -> check launchctl before Sat.
+
 ## Sprint (November 22-28, 2026)
 
 Codex codes (ChatGPT plan); Claude writes jobs, reviews, runs the browser.
