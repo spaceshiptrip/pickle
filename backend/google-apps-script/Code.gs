@@ -98,6 +98,7 @@ function doPost(e) {
 
   if (action === "botaddreservation") return json_(botAddReservation_(payload));
   if (action === "botfeed") return json_(botFeed_(payload));
+  if (action === "botsetcourt") return json_(botSetCourt_(payload));
 
   // Existing POST actions
   if (action === "signup") {
@@ -538,6 +539,48 @@ function botAddReservation_(p) {
       VisibleToGroups: both && latest ? latest[idx.VisibleToGroups] : ""
     });
     return { ok: true, duplicate: false, id: newId };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function botSetCourt_(p) {
+  var secret = PropertiesService.getScriptProperties().getProperty("BOT_SHARED_SECRET");
+  if (!secret || p.secret !== secret) return { ok: false, error: "forbidden" };
+  if ((p.remove !== "north" && p.remove !== "south") ||
+      p.reservationId === undefined || p.reservationId === null || String(p.reservationId).trim() === "")
+    return { ok: false, error: "bad_request" };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var sheet = getSheet_(RESERVATIONS_SHEET_NAME);
+    var values = sheet.getDataRange().getValues();
+    var idx = headerIndexMap_(values[0] || []);
+    if (["Id", "Court", "Capacity", "Status"].some(function (key) { return !(key in idx); }))
+      throw new Error("Reservations sheet missing required columns");
+    for (var i = 1; i < values.length; i++) {
+      var row = values[i];
+      if (String(row[idx.Id]).trim() !== String(p.reservationId).trim()) continue;
+      var court = String(row[idx.Court] || "").trim();
+      var status = String(row[idx.Status] || "").trim();
+      var capacity = row[idx.Capacity];
+      if (status.toLowerCase() !== "reserved") return { ok: false, error: "not_reserved" };
+      if (court === "Both") {
+        court = p.remove === "south" ? "North" : "South";
+        capacity = 8;
+        sheet.getRange(i + 1, idx.Court + 1).setValue(court);
+        sheet.getRange(i + 1, idx.Capacity + 1).setValue(capacity);
+      } else if ((court === "North" && p.remove === "north") ||
+                 (court === "South" && p.remove === "south")) {
+        status = "canceled";
+        sheet.getRange(i + 1, idx.Status + 1).setValue(status);
+      } else {
+        return { ok: false, error: "court_not_available" };
+      }
+      return { ok: true, reservationId: row[idx.Id], court: court, capacity: capacity, status: status };
+    }
+    return { ok: false, error: "unknown_reservation" };
   } finally {
     lock.releaseLock();
   }
