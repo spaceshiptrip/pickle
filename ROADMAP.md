@@ -84,7 +84,7 @@ Next: go live after a few trial texts -> book on request + My Reservations -> au
    (iPhone members too) and the Mac reports success anyway. Fix ($0):
    - Fun Group announcements: do NOT post into the mixed thread; fan out one-to-one instead:
      iPhone members -> iMessage (works remotely); Android members (Users.TextVia = sms:
-     Rhon, Randy, Marie) -> SMS (when the phone is near) AND email (always) via the Apps
+     Rhon, Randy, Marie) -> EMAIL ONLY (Jay 2026-11-27 10:22: Mac SMS failed for Randy) via the Apps
      Script / Gmail account. Member list from the chat's participants (read-only) mapped to
      Users by phone. JPL Pickle Crew (all iPhone) keeps the group post.
    - All personal texts to sms users also go by email when Users.Email exists; no email
