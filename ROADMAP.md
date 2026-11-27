@@ -57,6 +57,20 @@ baseline 17 keys). Bot launchd agents installed in ~/Library/LaunchAgents (survi
 Jay logs in after a restart). After-game texts name covered guests (ath-bot 92f8f4e).
 Next: go live after a few trial texts -> book on request + My Reservations -> auto-release.
 
+## Order for Fri 2026-11-27 (Jay, 23:31)
+
+1. Morning checks: Wed 11/25 texts (Jenn+Jordan, Marv+Carm+Nano thanks; Rachel+Luke $20,
+   JoeO $10 reminders) after GO; 11 AM group reminder (watch Fun Group / Android);
+   trial texts -> "go live".
+2. Club billing in the sheet (statement -> ClubBilling tab, match sessions, flag mismatches).
+3. Venmo cleanup (Jennifer Rivera -> Jenn; skip outgoing "You paid" / transfers).
+4. Pickle sheet MCP: add_session, set_visibility, add_player, mark_paid, add_user (via
+   backend actions with the bot secret; no raw cell writes).
+5. Nightly reservation sync (Athenaeum My Reservations <-> sheet; text Jay on fixes).
+6. Message cleanup (FirstName, one style; keep GameTexts as Android fallback if the
+   Fun Group post fails).
+Then: game-text switch in app, reports + running balance, speed, UI/UX refresh (Fable).
+
 ## Decision 2026-11-26 22:56: groups for announcements, personal texts for accounts
 
 Game announcements / RSVP reminders / court releases go ONLY to the Messages groups
