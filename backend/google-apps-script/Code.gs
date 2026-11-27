@@ -97,6 +97,7 @@ function doPost(e) {
   var action = getAction_(e, payload);
 
   if (action === "botaddreservation") return json_(botAddReservation_(payload));
+  if (action === "botfeed") return json_(botFeed_(payload));
 
   // Existing POST actions
   if (action === "signup") {
