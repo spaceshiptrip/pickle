@@ -64,8 +64,20 @@ Next: go live after a few trial texts -> book on request + My Reservations -> au
    trial texts -> "go live".
 2. Club billing in the sheet (statement -> ClubBilling tab, match sessions, flag mismatches).
 3. Venmo cleanup (Jennifer Rivera -> Jenn; skip outgoing "You paid" / transfers).
-4. Pickle sheet MCP: add_session, set_visibility, add_player, mark_paid, add_user (via
-   backend actions with the bot secret; no raw cell writes).
+4. Pickle sheet tools (Jay, 2026-11-27): ONE core, two wrappers, no AI inside.
+   - Core: plain Python functions in ath-bot (e.g. ops/pickle_sheet.py): add_session,
+     set_visibility, add_player, mark_paid, add_user. Each calls an Apps Script backend
+     action with the bot secret (no raw cell writes; add_user computes the user's own
+     LoginHash + default PinHash server-side).
+   - CLI wrapper for people/scripts/launchd, e.g.
+     `pickle add-player 2026-11-25 Nano --under Marv`
+   - MCP wrapper (pickleball-ops) over the same functions, for requests from Jay's phone.
+   - Guests under an account: add_player(date, name, under=<account user>) writes the row
+     with the account holder's UserId -> texts go to the holder with covers ("you and
+     Nano"), one Venmo covers all rows, Pay banner lists the guest.
+   - Long term (Claude out of the loop): scheduled work = scripts (bot, notifier,
+     auto-release, reservation sync, billing); ad-hoc work = admin buttons in the app
+     (UI/UX refresh); the MCP stays only as a convenience.
 5. Nightly reservation sync (Athenaeum My Reservations <-> sheet; text Jay on fixes).
 6. Message cleanup (FirstName, one style; keep GameTexts as Android fallback if the
    Fun Group post fails).
