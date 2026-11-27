@@ -98,6 +98,7 @@ function doPost(e) {
 
   if (action === "botaddreservation") return json_(botAddReservation_(payload));
   if (action === "botfeed") return json_(botFeed_(payload));
+  if (action === "botemail") return json_(botEmail_(payload));
   if (action === "botsetcourt") return json_(botSetCourt_(payload));
 
   // Existing POST actions
