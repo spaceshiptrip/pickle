@@ -11,6 +11,10 @@ export const VENMO_HANDLE = '@Jay-Torres-367';
 // Venmo link (e.g., 'https://venmo.com/John-Doe').
 export const VENMO_URL = `https://venmo.com/${VENMO_HANDLE.replace('@', '')}`;
 
+export function venmoPayUrl(amount, note) {
+    return `${VENMO_URL}?${new URLSearchParams({ txn: 'pay', amount, note })}`;
+}
+
 // Admin contact (E.164 format)
 export const JAY_PHONE_E164 = '+18186539874';
 

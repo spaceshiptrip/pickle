@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { VENMO_URL, JAY_PHONE_E164 } from '../config';
+import { venmoPayUrl, JAY_PHONE_E164 } from '../config';
 import { buildSmsHref, hoursUntil } from '../utils/sms';
 import { apiGet, apiPost } from '../api';
 
@@ -905,7 +905,7 @@ className={`
                     <a
                       className="rounded px-4 py-2 font-semibold bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors
                                  dark:bg-indigo-500/15 dark:text-indigo-200 dark:hover:bg-indigo-500/25"
-                    href={`${VENMO_URL}?txn=pay&amount=${suggestedTotalDue}&note=Pickleball ${reservation.Date} ${reservation.Start}`}
+                    href={venmoPayUrl(suggestedTotalDue, `Pickleball ${reservation.Date} ${reservation.Start}`)}
 
                       target="_blank"
                       rel="noreferrer"

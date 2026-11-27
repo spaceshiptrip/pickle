@@ -4,7 +4,8 @@ import CalendarView from "./components/CalendarView.jsx";
 import ReservationDrawer from "./components/ReservationDrawer.jsx";
 import AdminPanel from "./components/AdminPanel.jsx";
 import AuthView from "./components/AuthView.jsx";
-import { authApi } from "./api";
+import { apiGet, authApi } from "./api";
+import { COURT_TIMEZONE, venmoPayUrl } from "./config";
 import logo from "./assets/AthPicklersLogo.png";
 import spaceshiplogo from "./assets/SpaceshipTripLogo.png";
 import SettingsView from "./components/SettingsView";
@@ -130,6 +131,32 @@ export default function App() {
   };
 
   const [showReports, setShowReports] = useState(false);
+  const [unpaidSessions, setUnpaidSessions] = useState([]);
+
+  useEffect(() => {
+    if (!user) { setUnpaidSessions([]); return; }
+    if (selected || showReports) return;
+    let cancelled = false;
+    async function loadBalance() {
+      try {
+        const today = new Intl.DateTimeFormat("en-CA", {
+          timeZone: COURT_TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit",
+        }).format(new Date());
+        const report = await apiGet({ action: "reportsummary", from: "2000-01-01", to: today });
+        if (!cancelled) setUnpaidSessions((report.byReservation || []).filter(
+          (row) => row.status === "reserved" && row.date <= today && Number(row.balance) > 0,
+        ));
+      } catch (error) {
+        console.error("Failed to load balance", error);
+      }
+    }
+    loadBalance();
+    window.addEventListener("focus", loadBalance);
+    return () => { cancelled = true; window.removeEventListener("focus", loadBalance); };
+  }, [user, selected, showReports]);
+
+  const amountOwed = (unpaidSessions.reduce((sum, row) => sum + Number(row.balance), 0)).toFixed(2);
+  const unpaidDates = [...new Set(unpaidSessions.map((row) => row.date))].sort();
 
   if (loading) {
     return (
@@ -253,6 +280,19 @@ export default function App() {
           </div>
         </div>
         {/* --- END OF HEADER SECTION --- */}
+
+        {unpaidSessions.length > 0 && (
+          <div className="mb-4 rounded-xl bg-blue-50 dark:bg-slate-800 p-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="font-semibold">You owe ${amountOwed}</span>
+              <a className="rounded px-4 py-2 font-semibold bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-indigo-500/15 dark:text-indigo-200 dark:hover:bg-indigo-500/25"
+                href={venmoPayUrl(amountOwed, `Pickleball ${unpaidDates.join(", ")}`)} target="_blank" rel="noreferrer">
+                Pay ${amountOwed} with Venmo
+              </a>
+            </div>
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Paid with Venmo? Your Paid status updates automatically within about 10 minutes.</p>
+          </div>
+        )}
 
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-1">
           <CalendarView onSelectReservation={setSelected} />
