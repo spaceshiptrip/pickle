@@ -24,6 +24,18 @@ function getInitialTheme() {
   return prefersDark ? "dark" : "light";
 }
 
+function sessionLabel(session) {
+  const date = new Date(`${session.date}T12:00:00`);
+  const day = date.toLocaleDateString("en-US", { weekday: "short", month: "numeric", day: "numeric" });
+  const time = (value) => {
+    const [hour, minute] = value.split(":").map(Number);
+    return { text: `${hour % 12 || 12}${minute ? `:${String(minute).padStart(2, "0")}` : ""}`, period: hour < 12 ? "AM" : "PM" };
+  };
+  if (!session.start || !session.end) return day;
+  const start = time(session.start), end = time(session.end);
+  return `${day}, ${start.text}${start.period === end.period ? "" : ` ${start.period}`}–${end.text} ${end.period}`;
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -132,6 +144,7 @@ export default function App() {
 
   const [showReports, setShowReports] = useState(false);
   const [unpaidSessions, setUnpaidSessions] = useState([]);
+  const [showPayDetails, setShowPayDetails] = useState(false);
 
   useEffect(() => {
     if (!user) { setUnpaidSessions([]); return; }
@@ -291,6 +304,16 @@ export default function App() {
               </a>
             </div>
             <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Paid with Venmo? Your Paid status updates automatically within about 10 minutes.</p>
+            <button type="button" aria-expanded={showPayDetails} aria-controls="pay-details" onClick={() => setShowPayDetails(!showPayDetails)} className="mt-2 text-sm font-semibold text-blue-800 underline dark:text-indigo-200">
+              {showPayDetails ? "Hide details" : "See details"}
+            </button>
+            {showPayDetails && <ul id="pay-details" className="mt-2 space-y-1 text-sm text-slate-700 dark:text-slate-200">
+              {[...unpaidSessions].sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start)).map((session) => (
+                <li key={session.reservationId}>
+                  {sessionLabel(session)}: {(session.rows || []).filter((row) => Number(row.charge) > Number(row.paid)).map((row) => `${row.isSelf ? "you" : `${row.name} (guest)`} $${Number((row.charge - row.paid).toFixed(2))}`).join(" · ")}
+                </li>
+              ))}
+            </ul>}
           </div>
         )}
 

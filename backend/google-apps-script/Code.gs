@@ -1385,6 +1385,18 @@ function reportSummary_(sessionUser, params) {
   var headers = values[0];
   var idx = indexMap_(headers);
   var resStatus = reservationStatusById_();
+  var reservationTimes = {};
+  var resValues = getSheet_(RESERVATIONS_SHEET_NAME).getDataRange().getValues();
+  if (resValues.length > 1) {
+    var resIdx = indexMap_(resValues[0]);
+    resValues.slice(1).forEach(function (row) {
+      var id = String(row[resIdx["Id"]] || "").trim();
+      function time(value) {
+        return value instanceof Date ? Utilities.formatDate(value, tz, "HH:mm") : String(value || "");
+      }
+      if (id) reservationTimes[id] = { start: time(row[resIdx["Start"]]), end: time(row[resIdx["End"]]) };
+    });
+  }
 
   // Expected headers:
   // Date, Hours, Player Name, UserId, Present (1/0), Charge (auto), PAID, ReservationId
@@ -1439,12 +1451,23 @@ function reportSummary_(sessionUser, params) {
         date: formatYmd_(dt, tz),
         status: status,
         players: [],
+        start: (reservationTimes[reservationId] || {}).start || "",
+        end: (reservationTimes[reservationId] || {}).end || "",
+        rows: [],
         charges: 0,
         paid: 0,
       };
     }
 
     if (playerName) byRes[reservationId].players.push(playerName);
+    if (targetUserId === selfUserId) {
+      byRes[reservationId].rows.push({
+        name: playerName,
+        isSelf: playerName.toLowerCase() === String(reportForName || "").toLowerCase(),
+        charge: charge,
+        paid: paid,
+      });
+    }
     byRes[reservationId].charges += charge;
     byRes[reservationId].paid += paid;
   }
