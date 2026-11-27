@@ -48,6 +48,15 @@ function name (`migrateUsersToLoginHash` vs `migrateUsersToLoginHash_`).
 - **Partial payments** can't be recorded as "partial" by `markPaid_`, which
   sets PAID to the full charge or 0.
 
+## Status 2026-11-26 22:15
+
+Done today: Pay banner + "See details" per session/guest (checkin-app 9d4bb2e, web app v36;
+interim, restyle in the UI/UX refresh). botfeed action (v35). Mac notifier in TRIAL mode
+(ath-bot cb25e3d; every 10 min; texts Jay only; quiet 21:00-10:00; after-game 10 AM next day;
+baseline 17 keys). Bot launchd agents installed in ~/Library/LaunchAgents (survive reboots;
+Jay logs in after a restart). After-game texts name covered guests (ath-bot 92f8f4e).
+Next: go live after a few trial texts -> book on request + My Reservations -> auto-release.
+
 ## PRIORITY (Jay, 2026-11-26): automatic notifications, no Claude in the loop
 
 Mac launchd job every 10 min (ath-bot ops/notify), fixed approved templates, SMS/iMessage
