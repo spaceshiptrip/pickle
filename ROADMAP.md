@@ -86,7 +86,7 @@ Next: go live after a few trial texts -> book on request + My Reservations -> au
 4c. FUTURE PRICING RULE (Jay, 2026-11-27 13:47): one court with exactly 8 players (guests
    count) -> $5 each instead of $10. Apply at game end (after the list is final, before the
    10 AM after-game texts): set Charge 5 on that session's rows. Anyone who prepaid $10 gets
-   a $5 credit (needs the running balance, #130) or a refund note. Build after the billing
+   a $5 CREDIT, never a refund (Jay 13:48: "credit is great"; no automated Venmo refunds). Credit = running balance (#130): charges - payments carried forward; Pay banner/texts show "You owe $5 (you have $5 credit)". Refund only if a player asks: bot texts Jay, Jay sends it by hand. Build after the billing
    deep dive confirms the margin (1 court 2 h ~ $34 prime; 8 x $5 = $40).
 4b. Outside / free sessions (Jay, 2026-11-27): add_session(place, date, time, free) in the
    sheet tools (e.g. "Viña Vieja / Alice Dog Park Altadena", BaseFee 0). Admin panel bug:
