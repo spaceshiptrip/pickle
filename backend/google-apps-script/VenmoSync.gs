@@ -56,6 +56,11 @@ function sessionDatesFromNote_(note, receivedDate) {
   while ((match = app.exec(text))) add(Number(match[1]), Number(match[2]), Number(match[3]));
   // Remove ISO dates so their month/day components cannot be interpreted again.
   text = text.replace(/\b\d{4}-\d{2}-\d{2}\b/g, '');
+  var fullDate = /\b([0-1]?\d)([\/-])([0-3]?\d)\2(\d{4}|\d{2})\b/g;
+  text = text.replace(fullDate, function (value, month, separator, day, year) {
+    add(year.length === 2 ? 2000 + Number(year) : Number(year), Number(month), Number(day));
+    return '';
+  });
   var shortDate = /(^|[^\d])([0-1]?\d)[\/-]([0-3]?\d)(?![\d\/-])/g;
   while ((match = shortDate.exec(text))) {
     var year = receivedDate.getFullYear(), month = Number(match[2]), day = Number(match[3]);
