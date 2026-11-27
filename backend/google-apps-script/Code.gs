@@ -821,6 +821,10 @@ function signup_(payload, ctx) {
   var res = findReservation_(payload.reservationId);
   if (!res) return { ok: false, error: "reservation_not_found" };
 
+  // Serialize attendance reads and writes, including admin overrides.
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
   var sh = sheetByName(ATTENDANCE_SHEET_NAME);
   var attendees = readTable_(sh);
   var hasUserId = idxHasHeader_(attendees.header, "UserId");
@@ -862,6 +866,27 @@ function signup_(payload, ctx) {
         return p ? p : myName;
       })
       .filter(Boolean);
+  }
+
+  // Existing present players already occupy a spot and must not be added twice.
+  var idx = headerIndexMap_(attendees.header);
+  var presentNames = {};
+  var presentCount = 0;
+  attendees.rows.forEach(function (row) {
+    if (String(row[idx["ReservationId"]]) !== String(res.Id) ||
+        Number(row[idx["Present (1/0)"]]) !== 1) return;
+    presentCount++;
+    presentNames[String(row[idx["Player Name"]] || "").trim().toLowerCase()] = true;
+  });
+  players = players.filter(function (name) {
+    var key = name.toLowerCase();
+    if (presentNames[key]) return false;
+    presentNames[key] = true;
+    return true;
+  });
+  var capacity = Number(res.Capacity) || 0;
+  if (ctx.role !== "admin" && capacity > 0 && presentCount + players.length > capacity) {
+    return { ok: false, error: "full", spotsLeft: Math.max(0, capacity - presentCount) };
   }
 
   // ---- Per-person pricing ----
@@ -938,6 +963,10 @@ function signup_(payload, ctx) {
     count: players.length,
     totalDue: round2_(perPerson * players.length),
   };
+  } finally {
+    SpreadsheetApp.flush();
+    lock.releaseLock();
+  }
 }
 
 function unrsvp_(payload, ctx) {

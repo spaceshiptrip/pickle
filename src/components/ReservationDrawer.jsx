@@ -509,7 +509,12 @@ console.log('signup payload:', payload);
 		setBusy(true);              
     const res = await apiPost('signup', payload);
     if (!res?.ok) {
-      showToast('error', res?.error || 'Failed to sign up');
+      const message = res?.error === 'full'
+        ? (res.spotsLeft > 0
+          ? `Only ${res.spotsLeft} spot${res.spotsLeft === 1 ? '' : 's'} left.`
+          : `Sorry, this session is full (${cap} of ${cap}). Ask Jay if you'd like to be added.`)
+        : (res?.error || 'Failed to sign up');
+      showToast('error', message, 6000);
       return;
     }
 
@@ -753,7 +758,7 @@ className={`
             {!isProposed && (
               <div className="mt-1 text-sm rounded p-2 bg-slate-50 border border-slate-200 text-slate-700 dark:bg-slate-900/40 dark:border-slate-700 dark:text-slate-200">
                 <div>
-                  <span className={subtleTextClass}>Capacity:</span> {used}/{cap}
+                  <span className={subtleTextClass}>Capacity:</span> {used} of {cap} spots
                 </div>
                 <div>
                   <span className={subtleTextClass}>Base fee:</span> ${reservation.BaseFee}
