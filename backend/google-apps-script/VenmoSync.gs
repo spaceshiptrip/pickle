@@ -44,7 +44,7 @@ function venmoMoneyRelated_(subject, plainBody, htmlBody) {
   return /\$\s*[\d,]+(?:\s*\.\s*\d{1,2})?/.test(text) && /\b(?:paid|sent|payment|transfer|money)\b/i.test(text);
 }
 
-function sessionDatesFromNote_(note, receivedDate) {
+function sessionDatesFromNote_(note, receivedDate, rowDates) {
   var text = String(note || '').replace(/\+/g, ' '), dates = [], seen = {};
   function add(y, m, d) {
     var date = new Date(y, m - 1, d);
@@ -56,18 +56,47 @@ function sessionDatesFromNote_(note, receivedDate) {
   while ((match = app.exec(text))) add(Number(match[1]), Number(match[2]), Number(match[3]));
   // Remove ISO dates so their month/day components cannot be interpreted again.
   text = text.replace(/\b\d{4}-\d{2}-\d{2}\b/g, '');
-  var fullDate = /\b([0-1]?\d)([\/-])([0-3]?\d)\2(\d{4}|\d{2})\b/g;
+  var fullDate = /(?<![\d$])([0-1]?\d)([\/.-])([0-3]?\d)\2(\d{4}|\d{2})(?!\d)/g;
   text = text.replace(fullDate, function (value, month, separator, day, year) {
     add(year.length === 2 ? 2000 + Number(year) : Number(year), Number(month), Number(day));
     return '';
   });
-  var shortDate = /(^|[^\d])([0-1]?\d)[\/-]([0-3]?\d)(?![\d\/-])/g;
+  var shortDate = /(^|[^\d$])([0-1]?\d)[\/.-]([0-3]?\d)(?![\d\/.-])/g;
   while ((match = shortDate.exec(text))) {
     var year = receivedDate.getFullYear(), month = Number(match[2]), day = Number(match[3]);
     var candidate = new Date(year, month - 1, day);
     var today = new Date(year, receivedDate.getMonth(), receivedDate.getDate());
     if (candidate > today) year--;
     add(year, month, day);
+  }
+  var months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  var monthPattern = '(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)';
+  function namedDate(monthName, day, year) {
+    var month = months.indexOf(monthName.toLowerCase().slice(0, 3)) + 1;
+    if (year) { add(Number(year), month, Number(day)); return; }
+    var base = receivedDate.getFullYear(), best = base, distance = Infinity;
+    [base - 1, base, base + 1].forEach(function (y) {
+      var candidate = new Date(y, month - 1, Number(day));
+      if (candidate.getMonth() !== month - 1 || candidate.getDate() !== Number(day)) return;
+      var delta = Math.abs(candidate.getTime() - new Date(base, receivedDate.getMonth(), receivedDate.getDate()).getTime());
+      if (delta < distance) { distance = delta; best = y; }
+    });
+    add(best, month, Number(day));
+  }
+  text = text.replace(new RegExp('\\b' + monthPattern + '\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?\\b', 'gi'), function (_, m, d, y) { namedDate(m, d, y); return ' '; });
+  text = text.replace(new RegExp('\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+' + monthPattern + '\\.?\\b', 'gi'), function (_, d, m) { namedDate(m, d); return ' '; });
+  var weekdays = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  var paymentDay = new Date(receivedDate.getFullYear(), receivedDate.getMonth(), receivedDate.getDate());
+  var weekdayPattern = /\b(sun(?:day)?|mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?)\b/gi;
+  while ((match = weekdayPattern.exec(text))) {
+    var target = weekdays.indexOf(match[1].toLowerCase().slice(0, 3)), nearest = null, nearestDistance = Infinity;
+    (rowDates || []).forEach(function (value) {
+      var date = typeof value === 'string' ? parseYmd_(value) : value;
+      if (!date || isNaN(date.getTime()) || date.getDay() !== target) return;
+      var delta = Math.abs(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) - Date.UTC(paymentDay.getFullYear(), paymentDay.getMonth(), paymentDay.getDate())) / 86400000;
+      if (delta <= 10 && delta < nearestDistance) { nearest = date; nearestDistance = delta; }
+    });
+    if (nearest) add(nearest.getFullYear(), nearest.getMonth() + 1, nearest.getDate());
   }
   return dates;
 }
@@ -84,9 +113,32 @@ function venmoUser_(payer, users, idx) {
   return matches.length === 1 ? String(matches[0][idx.UserId]).trim() : null;
 }
 
-function venmoPlan_(payer, amount, dates, users, userIdx, attendance, attIdx, statuses) {
+function venmoPayerDates_(payer, users, userIdx, attendance, attIdx) {
+  var userId = venmoUser_(payer, users, userIdx);
+  return attendance.filter(function (row) { return userId && String(row[attIdx.UserId] || '').trim() === userId; })
+    .map(function (row) { return reservationDateKey_(row[attIdx.Date]); }).filter(Boolean);
+}
+
+function venmoPlan_(payer, amount, dates, users, userIdx, attendance, attIdx, statuses, receivedDate) {
   var userId = venmoUser_(payer, users, userIdx), remaining = Math.round(amount * 100), marked = [];
-  if (!userId || !dates.length) return { result: 'review', rows: marked };
+  if (!userId) return { result: 'review', rows: marked };
+  if (!dates.length) {
+    if (!receivedDate || isNaN(receivedDate.getTime())) return { result: 'review', rows: marked };
+    var paymentDay = Date.UTC(receivedDate.getFullYear(), receivedDate.getMonth(), receivedDate.getDate()), open = [];
+    attendance.forEach(function (row, i) {
+      var key = reservationDateKey_(row[attIdx.Date]), date = key && parseYmd_(key);
+      var age = date && (paymentDay - Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())) / 86400000;
+      var charge = Math.round(Number(row[attIdx.charge]) * 100), paid = Math.round(Number(row[attIdx.PAID] || 0) * 100);
+      if (String(row[attIdx.UserId] || '').trim() === userId && Number(row[attIdx.present]) === 1 &&
+          String(statuses[String(row[attIdx.ReservationId])] || '').trim().toLowerCase() === 'reserved' &&
+          date && age >= 0 && age <= 30 && isFinite(charge) && isFinite(paid) && charge > paid)
+        open.push({ row: i + 2, charge: charge / 100, due: charge - paid, date: key });
+    });
+    open.sort(function (a, b) { return a.date.localeCompare(b.date) || a.row - b.row; });
+    if (open.length && open.reduce(function (sum, entry) { return sum + entry.due; }, 0) === remaining)
+      return { result: 'done', rows: open.map(function (entry) { return { row: entry.row, charge: entry.charge }; }) };
+    return { result: 'review', rows: marked };
+  }
   attendance.forEach(function (row, i) {
     var date = parseSheetDate_(row[attIdx.Date]);
     if (!date && typeof row[attIdx.Date] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(row[attIdx.Date].trim())) date = parseYmd_(row[attIdx.Date].trim());
@@ -207,7 +259,7 @@ function resolveVenmo_(payload) {
         // Leftover money (tips, drinks) never keeps the payment in review: re-resolving it would add the players twice.
         result = spots > 0 && rowsMarked === spots ? 'done' : 'review';
       } else {
-        var plan = venmoPlan_(row[2], Number(row[3]), sessionDatesFromNote_(row[4], new Date(row[1])), users, userIdx, att, idx, statuses);
+        var plan = venmoPlan_(row[2], Number(row[3]), sessionDatesFromNote_(row[4], new Date(row[1]), venmoPayerDates_(row[2], users, userIdx, att, idx)), users, userIdx, att, idx, statuses, new Date(row[1]));
         plan.rows.forEach(function (entry) { sheet.getRange(entry.row, idx.PAID + 1).setValue(entry.charge); });
         result = plan.result; rowsMarked = plan.rows.length;
       }
@@ -253,7 +305,7 @@ function venmoSync() {
       if (!/(?:^|[<\s])[^\s<>@]+@venmo\.com(?:>|$)/i.test(message.getFrom().trim()) || seen[id]) return;
       var subject = message.getSubject(), plain = message.getPlainBody(), html = message.getBody();
       var parsed = parseVenmoPayment_(subject, plain, html), note = parsed ? parsed.note : subject;
-      var plan = parsed ? venmoPlan_(parsed.payer, parsed.amount, sessionDatesFromNote_(note, message.getDate()), users, userIdx, att, attIdx, statuses) : { result: venmoMoneyRelated_(subject, plain, html) ? 'review' : 'skipped', rows: [] };
+      var plan = parsed ? venmoPlan_(parsed.payer, parsed.amount, sessionDatesFromNote_(note, message.getDate(), venmoPayerDates_(parsed.payer, users, userIdx, att, attIdx)), users, userIdx, att, attIdx, statuses, message.getDate()) : { result: venmoMoneyRelated_(subject, plain, html) ? 'review' : 'skipped', rows: [] };
       if (live) plan.rows.forEach(function (entry) { sheet.getRange(entry.row, attIdx.PAID + 1).setValue(entry.charge); att[entry.row - 2][attIdx.PAID] = entry.charge; });
       else plan.rows.forEach(function (entry) { att[entry.row - 2][attIdx.PAID] = entry.charge; });
       log.appendRow([id, message.getDate(), parsed ? parsed.payer : '', parsed ? parsed.amount : '', note, plan.result, plan.rows.length, live ? 'live' : 'dry']);
