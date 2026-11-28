@@ -888,9 +888,9 @@ className={`
                 </label>
               )}
 
-              {Number(reservation?.BaseFee) > 0 && (
+              {totalFees > 0 && (
                 <p className={`text-sm ${subtleTextClass}`}>
-                  $10 per player, guests too. Can't make it after the RSVP cutoff? Please still cover your spot if we can't fill it.
+                  ${totalFees} per player, guests too. Can't make it after the RSVP cutoff? Please still cover your spot if we can't fill it.
                 </p>
               )}
 
