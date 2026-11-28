@@ -89,6 +89,11 @@ Next: go live after a few trial texts -> book on request + My Reservations -> au
    to torres.jay@gmail.com, then the Venmo checker also reads them (same payer matching via
    Users.VenmoName / a new ZelleName, same date parsing incl. "11 26 26"). Until then Jay tells
    Claude and Claude marks paid (thank-you text goes out automatically).
+4e. Account-aware texts (Jay, 2026-11-28): texts describe the ACCOUNT, not just the holder:
+   name only unpaid people ("for Carm and Nano ($15)"), per-person amounts when they differ
+   (kids at $5), credits ("you have $5 credit"), households paying for each other. First
+   piece shipped with ath-bot fix/unpaid-wording; the rest lands with family pricing + the
+   running balance so Claude does not hand-craft these.
 4c. FUTURE PRICING RULE (Jay, 2026-11-27 13:47): one court with exactly 8 players (guests
    count) -> $5 each instead of $10. Apply at game end (after the list is final, before the
    10 AM after-game texts): set Charge 5 on that session's rows. Anyone who prepaid $10 gets
