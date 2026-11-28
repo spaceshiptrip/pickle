@@ -888,6 +888,12 @@ className={`
                 </label>
               )}
 
+              {Number(reservation?.BaseFee) > 0 && (
+                <p className={`text-sm ${subtleTextClass}`}>
+                  $10 per player, guests too. Can't make it after the RSVP cutoff? Please still cover your spot if we can't fill it.
+                </p>
+              )}
+
               <div className="flex gap-2 mt-3 flex-wrap">
                 <button
                   className={`bg-blue-600 text-white rounded px-4 py-2 font-semibold inline-flex items-center gap-2
