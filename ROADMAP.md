@@ -266,6 +266,17 @@ codex_task) in ath-bot/ops/mcp.
    tokens from training_sheet/docs/design/fable_2026-11-16 ($0). Fold in:
    "Pay my balance" button, All time / This year report presets, upcoming
    sessions in the personal report.
+   Add a "How it works" page with the group policies (Nov 28 consensus,
+   Claude/ChatGPT/Gemini): price = session BaseFee per player (now $10),
+   guests too, host covers guests; pay by game time (Venmo/app Pay; Zelle
+   OK); can't make it after the RSVP cutoff and spot not filled -> still
+   owed; outside/free sessions $0; overpay -> credit, never refund; one
+   household payment OK; courts 9+ = 2, 5-8 = 1, <=4 maybe cancel (decided
+   ~a day before); 8 per court, sign-up closes when full. Under review, NOT
+   in effect: $20 household cap (household = lives together, even if
+   entered as a guest; friends $10 and outside the cap; replay 2-court
+   nights first), $5 full-court rule. Price line above Register is live
+   (2d4066f + fee-from-sheet fix).
 5. [ ] Mac mini prep before Nov 29 (after the Sat run):
    - launchd install script with repo-relative paths (one command on the new Mac).
    - Bot success check: drop the bare "confirmed" marker (false-win risk).
