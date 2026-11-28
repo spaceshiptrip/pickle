@@ -293,7 +293,9 @@ codex_task) in ath-bot/ops/mcp.
    backend/app/texts; (b) billing reconciliation Nov 2025 -> now = reserve;
    (c) bot rule in ops (new file, not auto_release core); (d) reserve
    guardrail; (e) How it works page + price line "Full court of 8? $7 each".
-   Live only after (b) shows the reserve. Price line above Register is live
+   Live only after (b) shows the reserve.
+   ROLLOUT (Jay Nov 28): after the deep dive settles and policies are final ->
+   one group announcement + the How it works page shown prominently on the site. Price line above Register is live
    (2d4066f + fee-from-sheet fix).
 5. [ ] Mac mini prep before Nov 29 (after the Sat run):
    - launchd install script with repo-relative paths (one command on the new Mac).
