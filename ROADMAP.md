@@ -83,6 +83,12 @@ Next: go live after a few trial texts -> book on request + My Reservations -> au
    - Long term (Claude out of the loop): scheduled work = scripts (bot, notifier,
      auto-release, reservation sync, billing); ad-hoc work = admin buttons in the app
      (UI/UX refresh); the MCP stays only as a convenience.
+4d. ZELLE PAYMENTS (Jay, 2026-11-27): some players pay by Zelle (Bank of America), e.g.
+   "Vincent Calanoc sent you $10.00 for \"ATHENAEUM 11 26 26\"". Today these arrive as BofA
+   text alerts on Jay's phone (not readable by the bot). Plan: turn on BofA Zelle EMAIL alerts
+   to torres.jay@gmail.com, then the Venmo checker also reads them (same payer matching via
+   Users.VenmoName / a new ZelleName, same date parsing incl. "11 26 26"). Until then Jay tells
+   Claude and Claude marks paid (thank-you text goes out automatically).
 4c. FUTURE PRICING RULE (Jay, 2026-11-27 13:47): one court with exactly 8 players (guests
    count) -> $5 each instead of $10. Apply at game end (after the list is final, before the
    10 AM after-game texts): set Charge 5 on that session's rows. Anyone who prepaid $10 gets
