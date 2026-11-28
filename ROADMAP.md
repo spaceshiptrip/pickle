@@ -275,7 +275,21 @@ codex_task) in ath-bot/ops/mcp.
    ~a day before); 8 per court, sign-up closes when full. Under review, NOT
    in effect: $20 household cap (household = lives together, even if
    entered as a guest; friends $10 and outside the cap; replay 2-court
-   nights first), $5 full-court rule. Price line above Register is live
+   nights first).
+   APPROVED (Jay GO Nov 28, after ChatGPT/Gemini review) - FULL-COURT $7:
+   one court + 8 actually present (Present=1) -> that night is $7/player,
+   set by the bot the morning after, before the 10:00 texts. Paid $10 ->
+   $3 credit, auto-applied to the next game; the 10:00 text says so.
+   Fewer than 8 present -> normal fee; late cancels/no-shows owe the normal
+   fee. Guardrail: runs only while group reserve >= $100 after outstanding
+   credits; auto-pauses below, resumes when recovered; earned credits always
+   honored. Why $7 not $5: +$22 on a full court, +$8 with 2 unpaid; the 8th
+   player trims $14 (not $30). Build order (all after a midnight run, small
+   Codex jobs, first write needs Jay OK): (a) credits + running balance in
+   backend/app/texts; (b) billing reconciliation Nov 2025 -> now = reserve;
+   (c) bot rule in ops (new file, not auto_release core); (d) reserve
+   guardrail; (e) How it works page + price line "Full court of 8? $7 each".
+   Live only after (b) shows the reserve. Price line above Register is live
    (2d4066f + fee-from-sheet fix).
 5. [ ] Mac mini prep before Nov 29 (after the Sat run):
    - launchd install script with repo-relative paths (one command on the new Mac).
