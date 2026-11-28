@@ -68,6 +68,10 @@ Next: go live after a few trial texts -> book on request + My Reservations -> au
    Venmo) vs what was owed -> shortfall per month and per session, who is behind, and
    which sessions lost money (few players on two courts, unpaid guests, prime/lights rates).
    Family pricing (kids half price / household cap): DECIDE AFTER this deep dive.
+   Known item: Jason Villamater (UserId 33). Venmo shows only $10 on 11/23 (note 11/22)
+   and $10 on 11/25, but Attendance marks 4 rows paid (11/22 + "+1", 11/25 + "+1" = $40).
+   Plus 8/12 row 412 ($10 unpaid) is under JayViray (32), likely his pre-revamp $10.
+   Possible gap $30 unless the guests paid another way. Jay OK to forgive; settle here.
 3. Venmo cleanup (Jennifer Rivera -> Jenn; skip outgoing "You paid" / transfers).
 4. Pickle sheet tools (Jay, 2026-11-27): ONE core, two wrappers, no AI inside.
    - Core: plain Python functions in ath-bot (e.g. ops/pickle_sheet.py): add_session,
